@@ -99,7 +99,7 @@ namespace BrokenMicrophone
         {
             var wa = Screen.FromPoint(Cursor.Position).WorkingArea;
             var frame = SizeFromClientSize(Size.Empty);
-            MinimumSize = SizeFromClientSize(new Size(P(720), P(560)));
+            MinimumSize = SizeFromClientSize(new Size(P(400), P(480)));
             ClientSize = new Size(Math.Min(P(940), wa.Width - frame.Width), Math.Min(P(740), wa.Height - frame.Height));
             try
             {
@@ -390,67 +390,96 @@ namespace BrokenMicrophone
             ResumeLayout();
         }
 
+        // Duyarlı düzen: içerik en fazla P(1040) genişlikte ve ortada durur; geniş pencerede iki sütun,
+        // dar pencerede tek sütun. Pencere içerikten uzunsa dikeyde de ortalanır, kısaysa kaydırılır.
         void DoLayout()
         {
             if (lblFoot == null) return;
-            int W = page.ClientSize.Width;
-            int pad = P(24), x = pad, w = W - pad * 2, y = pad - page.VerticalScroll.Value;
+            int W = page.ClientSize.Width, H = page.ClientSize.Height;
+            int pad = W < P(560) ? P(16) : P(28);
+            int w = Math.Min(P(1040), W - pad * 2);
+            int x = (W - w) / 2;
 
+            int height = Place(x, 0, w) ;                       // önce ölç
+            int top = height + pad * 2 <= H ? (H - height) / 2 : pad - page.VerticalScroll.Value;
+            Place(x, top, w);
+            page.AutoScrollMinSize = height + pad * 2 <= H ? Size.Empty : new Size(0, height + pad * 2);
+            page.Invalidate();
+        }
+
+        /// <summary>Denetimleri yerleştirir, kapladığı yüksekliği döndürür.</summary>
+        int Place(int x, int y0, int w)
+        {
+            int y = y0;
+            bool narrow = w < P(600);
+
+            // başlık: dar pencerede dil ve Hakkında alt satıra iner
             logo.SetBounds(x, y, P(48), P(48));
             lblTitle.Location = new Point(x + P(62), y - P(1));
             lblSub.Location = new Point(x + P(64), y + P(30));
-            int bx = x + w;
-            btnAbout.SetBounds(bx - P(90), y + P(6), P(90), P(32));
-            bx -= P(90) + P(8);
-            segLang.SetBounds(bx - P(96), y + P(6), P(96), P(32));
-            y += P(70);
+            int by = narrow ? y + P(62) : y + P(6);
+            btnAbout.SetBounds(x + w - P(90), by, P(90), P(32));
+            segLang.SetBounds(x + w - P(90) - P(8) - P(96), by, P(96), P(32));
+            y = narrow ? by + P(48) : y + P(70);
 
-            int infoW = btnDriver.Visible ? w - P(250) : w;
+            // bilgi şeridi: dar pencerede düğme altına iner
+            bool driverBelow = btnDriver.Visible && w < P(720);
+            int infoW = btnDriver.Visible && !driverBelow ? w - P(250) : w;
             info.SetBounds(x, y, infoW, Math.Max(P(46), info.Measure(infoW)));
-            if (btnDriver.Visible) btnDriver.SetBounds(x + w - P(238), y + (info.Height - P(40)) / 2, P(238), P(40));
-            y = info.Bottom + P(20);
+            if (btnDriver.Visible)
+            {
+                if (driverBelow) { btnDriver.SetBounds(x, info.Bottom + P(10), w, P(40)); y = btnDriver.Bottom; }
+                else { btnDriver.SetBounds(x + w - P(238), y + (info.Height - P(40)) / 2, P(238), P(40)); y = info.Bottom; }
+            }
+            else y = info.Bottom;
+            y += P(22);
 
-            // iki sütun: solda QR, sağda ses
-            int leftW = P(300), gap = P(24), rightX = x + leftW + gap, rightW = w - leftW - gap;
+            bool twoCols = w >= P(760);
+            int gap = P(32);
+            int leftW = twoCols ? Math.Max(P(280), Math.Min(P(360), (w - gap) * 38 / 100)) : w;
             int top = y;
 
+            // telefon bölümü (QR)
             secPhone.Location = new Point(x, y);
             y += P(24);
-            qr.SetBounds(x, y, leftW, leftW + P(26));
+            int qw = Math.Min(leftW, P(340));
+            int qx = twoCols ? x : x + (w - qw) / 2;          // tek sütunda QR ortada
+            qr.SetBounds(qx, y, qw, qw + P(26));
             y = qr.Bottom + P(10);
             cmbAddress.Visible = addresses.Count > 1;
-            if (cmbAddress.Visible) { cmbAddress.SetBounds(x, y, leftW, P(30)); y = cmbAddress.Bottom + P(10); }
-            btnCopy.SetBounds(x, y, (leftW - P(8)) / 2, P(36));
-            btnHelp.SetBounds(x + (leftW + P(8)) / 2, y, (leftW - P(8)) / 2, P(36));
+            if (cmbAddress.Visible) { cmbAddress.SetBounds(qx, y, qw, P(30)); y = cmbAddress.Bottom + P(10); }
+            btnCopy.SetBounds(qx, y, (qw - P(8)) / 2, P(36));
+            btnHelp.SetBounds(qx + (qw + P(8)) / 2, y, (qw - P(8)) / 2, P(36));
             y = btnCopy.Bottom + P(12);
-            lblSteps.MaximumSize = new Size(leftW, 0);
-            lblSteps.Location = new Point(x, y);
+            lblSteps.MaximumSize = new Size(qw, 0);
+            lblSteps.Location = new Point(qx, y);
             int leftBottom = y + lblSteps.Height;
 
-            y = top;
-            secOut.Location = new Point(rightX, y);
+            // ses bölümü: yanda ya da altta
+            int rx = twoCols ? x + leftW + gap : x;
+            int rw = twoCols ? w - leftW - gap : w;
+            y = twoCols ? top : leftBottom + P(26);
+            secOut.Location = new Point(rx, y);
             y += P(24);
-            cmbOutput.SetBounds(rightX, y, rightW, P(30));
+            cmbOutput.SetBounds(rx, y, rw, P(30));
             y = cmbOutput.Bottom + P(8);
-            lblOutHint.MaximumSize = new Size(rightW, 0);
-            lblOutHint.Location = new Point(rightX, y);
+            lblOutHint.MaximumSize = new Size(rw, 0);
+            lblOutHint.Location = new Point(rx, y);
             y = lblOutHint.Bottom + P(12);
-            meter.SetBounds(rightX, y, rightW, P(12));
+            meter.SetBounds(rx, y, rw, P(12));
             y = meter.Bottom + P(12);
-            tglMonitor.SetBounds(rightX, y, rightW, P(30));
+            tglMonitor.SetBounds(rx, y, rw, P(30));
             tglMonitor.Visible = output != null && output.Virtual;
             if (tglMonitor.Visible) y = tglMonitor.Bottom + P(14); else y += P(4);
-
-            secDevices.Location = new Point(rightX, y);
+            secDevices.Location = new Point(rx, y);
             y += P(24);
-            list.SetBounds(rightX, y, rightW, list.Measure());
+            list.SetBounds(rx, y, rw, list.Measure());
             int rightBottom = list.Bottom;
 
-            y = Math.Max(leftBottom, rightBottom) + P(22);
+            y = (twoCols ? Math.Max(leftBottom, rightBottom) : rightBottom) + P(24);
             lblFoot.MaximumSize = new Size(w, 0);
             lblFoot.Location = new Point(x, y);
-            page.AutoScrollMinSize = new Size(0, y + lblFoot.Height + pad + page.VerticalScroll.Value);
-            page.Invalidate();
+            return y + lblFoot.Height - y0;
         }
 
         void UpdateUrl()
