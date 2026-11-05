@@ -53,6 +53,7 @@ namespace BrokenMicrophone
             page.AutoScroll = true;
             page.Resize += delegate { DoLayout(); };
             Controls.Add(page);
+            BrokenUi.GlassScroll.Attach(page, Theme.Bg, Theme.Accent);   // beyaz Windows çubuğu yerine koyu cam çubuk
 
             addresses = Net.Addresses();
             outputs = Player.Devices();
