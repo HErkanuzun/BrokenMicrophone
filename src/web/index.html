@@ -163,7 +163,7 @@
 
   // QR kodundaki anahtar adres çubuğundan silinir ve saklanır
   var key = (location.hash.match(/k=([a-z0-9]+)/i) || [])[1];
-  if (key) { store('key', key); try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+  if (key) { store('key', key); try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} }
   else key = store('key');
 
   Object.keys(opts).forEach(function (k) {
@@ -176,6 +176,11 @@
   function setStatus(kind, text) { $('status').className = 'status ' + kind; $('statusText').textContent = text; }
 
   var ctx = null, stream = null, source = null, node = null, sink = null, ws = null;
+  // Yol: önce WebSocket. Bazı tarayıcılar (iOS Safari) kendinden imzalı sertifikada WebSocket'i reddeder;
+  // o zaman ses https POST istekleriyle gider ve bu telefon için hatırlanır.
+  var transport = (location.search.match(/transport=(ws|http)/) || [])[1] || store('transport') || 'ws';
+  var sid = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+  var queue = [], queued = 0, inflight = false, httpOn = false, lastPost = 0, httpTimer = null;
   var running = false, muted = false, wsOpen = false, retryTimer = null, pingTimer = null, wakeLock = null, level = 0;
 
   function refreshUi() {
@@ -193,6 +198,7 @@
   function connect() {
     if (!running) return;
     clearTimeout(retryTimer);
+    if (transport === 'http') { httpStart(); return; }
     try { ws = new WebSocket('wss://' + location.host + '/ws?k=' + encodeURIComponent(key)); }
     catch (e) { retry(); return; }
     ws.binaryType = 'arraybuffer';
@@ -201,13 +207,64 @@
     ws.onclose = function () {
       wsOpen = false;
       if (!running) return;
-      if (!opened) { setStatus('err', t('badKey')); }
-      else setStatus('warn', t('reconnecting'));
+      if (!opened) {
+        // WebSocket hiç açılmadı: anahtar mı yanlış, yoksa tarayıcı mı izin vermiyor?
+        fetch('/check?k=' + encodeURIComponent(key), { cache: 'no-store' }).then(function (r) {
+          if (r.status === 403) { setStatus('err', t('badKey')); retry(); }
+          else { transport = 'http'; store('transport', 'http'); httpStart(); }
+        }).catch(function () { setStatus('warn', t('reconnecting')); retry(); });
+        refreshUi();
+        return;
+      }
+      setStatus('warn', t('reconnecting'));
       refreshUi();
       retry();
     };
     ws.onerror = function () {};
   }
+  // ---------------------------------------------------------------- https yolu
+  function httpStart() {
+    httpOn = true;
+    clearInterval(httpTimer);
+    httpTimer = setInterval(flush, 100);
+    lastPost = 0;
+    flush();
+  }
+  function httpStop(bye) {
+    if (!httpOn) return;
+    httpOn = false;
+    clearInterval(httpTimer);
+    queue = []; queued = 0;
+    if (bye) try { fetch(pushUrl() + '&bye=1', { method: 'POST', body: new Uint8Array(0), keepalive: true }); } catch (e) {}
+  }
+  function pushUrl() {
+    var track = stream && stream.getAudioTracks()[0];
+    return '/push?k=' + encodeURIComponent(key) + '&sid=' + sid + '&rate=' + (ctx ? ctx.sampleRate : 48000) +
+           '&muted=' + (muted ? 1 : 0) + '&mic=' + encodeURIComponent(track ? track.label : '');
+  }
+  function flush() {
+    if (!httpOn) return;
+    if (inflight) {
+      // ağ yavaşsa biriken eski ses atılır, gecikme büyümesin
+      if (ctx && queued > ctx.sampleRate / 2) { queue = []; queued = 0; }
+      return;
+    }
+    if (!queue.length && Date.now() - lastPost < 1000) return;   // sessizde de saniyede bir "buradayım"
+    var body = new Uint8Array(queued * 2), o = 0;
+    queue.forEach(function (b) { body.set(new Uint8Array(b), o); o += b.byteLength; });
+    queue = []; queued = 0;
+    inflight = true; lastPost = Date.now();
+    fetch(pushUrl(), { method: 'POST', body: body, cache: 'no-store' }).then(function (r) {
+      inflight = false;
+      if (!httpOn) return;
+      if (r.status === 403) { setStatus('err', t('badKey')); return; }
+      if (!wsOpen) { wsOpen = true; refreshUi(); }
+    }).catch(function () {
+      inflight = false;
+      if (wsOpen) { wsOpen = false; setStatus('warn', t('reconnecting')); refreshUi(); }
+    });
+  }
+
   function retry() { clearTimeout(retryTimer); retryTimer = setTimeout(connect, 1500); }
   function send(obj) { if (ws && ws.readyState === 1) ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); }
   function hello() {
@@ -289,7 +346,9 @@
       node.port.onmessage = function (e) {
         var d = e.data;
         level = Math.max(level * 0.8, d.peak);
-        if (!muted && ws && ws.readyState === 1 && ws.bufferedAmount < ctx.sampleRate) ws.send(d.pcm);
+        if (muted) return;
+        if (httpOn) { queue.push(d.pcm); queued += d.pcm.byteLength / 2; }
+        else if (ws && ws.readyState === 1 && ws.bufferedAmount < ctx.sampleRate) ws.send(d.pcm);
       };
       // düğüm çalışsın diye sessiz bir çıkışa bağlanır (telefonda geri ses olmaz)
       sink = ctx.createGain(); sink.gain.value = 0;
@@ -309,6 +368,7 @@
   function stop() {
     running = false; muted = false; wsOpen = false;
     clearTimeout(retryTimer); clearInterval(pingTimer);
+    httpStop(true);
     if (ws) { ws.onclose = null; try { ws.close(); } catch (e) {} ws = null; }
     closeMic();
     if (ctx) { try { ctx.close(); } catch (e) {} ctx = null; }
@@ -322,6 +382,7 @@
   function setMuted(m) {
     muted = m;
     send({ t: 'state', muted: muted });
+    lastPost = 0;
     refreshUi();
   }
 
@@ -344,7 +405,7 @@
       var tr0 = stream && stream.getAudioTracks()[0];
       if (!tr0 || tr0.readyState === 'ended') restartMic();
       keepAwake();
-      if (!ws || ws.readyState > 1) connect();
+      if (transport === 'http' ? !httpOn : (!ws || ws.readyState > 1)) connect();
     }
   });
 

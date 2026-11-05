@@ -26,7 +26,9 @@ namespace BrokenMicrophone
         public volatile float Peak;       // son paketin en yüksek seviyesi (0..1)
         public DateTime LastAudio = DateTime.MinValue;
         public string Address = "";
-        internal Stream Stream;
+        internal Stream Stream;           // WebSocket bağlantısı; null = https istekleriyle gelen istemci
+        internal string Sid;              // https yolunda sayfanın oturum kimliği
+        internal DateTime LastSeen = DateTime.Now;
         internal readonly object WriteLock = new object();
 
         public bool Sending { get { return !Muted && (DateTime.Now - LastAudio).TotalMilliseconds < 1000; } }
@@ -34,6 +36,7 @@ namespace BrokenMicrophone
         // Telefona metin mesajı (WebSocket metin çerçevesi)
         public void Send(string text)
         {
+            if (Stream == null) return;
             var p = Encoding.UTF8.GetBytes(text);
             var f = new List<byte>(p.Length + 4);
             f.Add(0x81);
@@ -46,6 +49,7 @@ namespace BrokenMicrophone
 
         public void Close()
         {
+            if (Stream == null) return;
             try { lock (WriteLock) Stream.Write(new byte[] { 0x88, 0 }, 0, 2); } catch { }
             try { Stream.Close(); } catch { }
         }
@@ -84,6 +88,10 @@ namespace BrokenMicrophone
             t.IsBackground = true;
             t.Name = "Accept";
             t.Start();
+            var w = new Thread(Watchdog);
+            w.IsBackground = true;
+            w.Name = "Watchdog";
+            w.Start();
             return true;
         }
 
@@ -107,6 +115,27 @@ namespace BrokenMicrophone
             }
         }
 
+        // https yolundaki istemciler 4 sn istek göndermezse ayrılmış sayılır
+        void Watchdog()
+        {
+            while (running)
+            {
+                Thread.Sleep(1000);
+                var gone = new List<Client>();
+                lock (clients)
+                    foreach (var c in clients)
+                        if (c.Stream == null && (DateTime.Now - c.LastSeen).TotalSeconds > 4) gone.Add(c);
+                foreach (var c in gone) Drop(c);
+            }
+        }
+
+        void Drop(Client c)
+        {
+            bool had;
+            lock (clients) had = clients.Remove(c);
+            if (had) Fire(Disconnected, c);
+        }
+
         void Handle(TcpClient tc)
         {
             Client client = null;
@@ -126,56 +155,120 @@ namespace BrokenMicrophone
                     s = ssl;
                 }
 
-                var req = ReadRequest(s);
-                if (req == null) return;
-                string path = req.Path;
-
-                if (!tls)
+                while (true)
                 {
-                    // telefon adresi https olmadan yazdıysa
-                    string host = req.Header("host");
-                    if (host == "") host = ((IPEndPoint)sock.LocalEndPoint).Address + ":" + Port;
-                    Respond(s, "301 Moved Permanently", "text/plain", Encoding.UTF8.GetBytes("https://" + host + path), "Location: https://" + host + path + "\r\n");
-                    return;
-                }
+                    var req = ReadRequest(s);
+                    if (req == null) return;
+                    string path = req.Path;
+                    bool keep = tls && req.Header("connection").ToLowerInvariant() != "close";
 
-                int q = path.IndexOf('?');
-                string route = q < 0 ? path : path.Substring(0, q);
-                string query = q < 0 ? "" : path.Substring(q + 1);
+                    if (!tls)
+                    {
+                        // telefon adresi https olmadan yazdıysa
+                        string host = req.Header("host");
+                        if (host == "") host = ((IPEndPoint)sock.LocalEndPoint).Address + ":" + Port;
+                        Respond(s, "301 Moved Permanently", "text/plain", Encoding.UTF8.GetBytes("https://" + host + path), "Location: https://" + host + path + "\r\n", false);
+                        return;
+                    }
 
-                if (route == "/ws" && req.Header("upgrade").ToLowerInvariant() == "websocket")
-                {
-                    if (Query(query, "k") != key) { Respond(s, "403 Forbidden", "text/plain", Encoding.UTF8.GetBytes("bad key"), ""); return; }
-                    string accept = Convert.ToBase64String(SHA1.Create().ComputeHash(Encoding.ASCII.GetBytes(req.Header("sec-websocket-key") + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")));
-                    var hs = Encoding.ASCII.GetBytes("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + "\r\n\r\n");
-                    s.Write(hs, 0, hs.Length);
-                    s.Flush();
-                    tc.ReceiveTimeout = 20000;  // telefon her 5 sn'de en az bir mesaj gönderir
-                    client = new Client();
-                    client.Stream = s;
-                    client.Address = ((IPEndPoint)sock.RemoteEndPoint).Address.ToString();
-                    client.Name = DeviceName(req.Header("user-agent"));
-                    lock (clients) clients.Add(client);
-                    Fire(Connected, client);
-                    WebSocketLoop(client, s);
-                    return;
-                }
+                    int q = path.IndexOf('?');
+                    string route = q < 0 ? path : path.Substring(0, q);
+                    string query = q < 0 ? "" : path.Substring(q + 1);
 
-                // sayfa dosyaları
-                string file = route == "/" ? "index.html" : route.TrimStart('/');
-                string type;
-                switch (Path.GetExtension(file))
-                {
-                    case ".html": type = "text/html; charset=utf-8"; break;
-                    case ".js": type = "text/javascript; charset=utf-8"; break;
-                    case ".json": type = "application/manifest+json"; break;
-                    case ".png": type = "image/png"; break;
-                    default: type = null; break;
+                    if (route == "/ws" && req.Header("upgrade").ToLowerInvariant() == "websocket")
+                    {
+                        if (Query(query, "k") != key) { Respond(s, "403 Forbidden", "text/plain", Encoding.UTF8.GetBytes("bad key"), "", false); return; }
+                        string accept = Convert.ToBase64String(SHA1.Create().ComputeHash(Encoding.ASCII.GetBytes(req.Header("sec-websocket-key") + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")));
+                        var hs = Encoding.ASCII.GetBytes("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + "\r\n\r\n");
+                        s.Write(hs, 0, hs.Length);
+                        s.Flush();
+                        tc.ReceiveTimeout = 20000;  // telefon her 5 sn'de en az bir mesaj gönderir
+                        client = new Client();
+                        client.Stream = s;
+                        client.Address = ((IPEndPoint)sock.RemoteEndPoint).Address.ToString();
+                        client.Name = DeviceName(req.Header("user-agent"));
+                        lock (clients) clients.Add(client);
+                        Fire(Connected, client);
+                        WebSocketLoop(client, s);
+                        return;
+                    }
+
+                    // anahtar doğru mu (sayfa WebSocket açılamayınca sorar)
+                    if (route == "/check")
+                    {
+                        bool ok = Query(query, "k") == key;
+                        Respond(s, ok ? "204 No Content" : "403 Forbidden", "text/plain", new byte[0], "", keep);
+                        if (!keep) return;
+                        continue;
+                    }
+
+                    // WebSocket'e izin vermeyen tarayıcılar için: ses https POST istekleriyle gelir (~100 ms'lik parçalar)
+                    if (route == "/push" && req.Method == "POST")
+                    {
+                        int len;
+                        if (!int.TryParse(req.Header("content-length"), out len) || len < 0 || len > 1 << 20) return;
+                        var data = new byte[len];
+                        if (!ReadFull(s, data, 0, len)) return;
+                        string sid = Query(query, "sid");
+                        if (Query(query, "k") != key || sid == "" || sid.Length > 40)
+                        {
+                            Respond(s, "403 Forbidden", "text/plain", new byte[0], "", keep);
+                            if (!keep) return;
+                            continue;
+                        }
+                        bool bye = Query(query, "bye") == "1";
+                        Client c = null;
+                        bool isNew = false;
+                        lock (clients)
+                        {
+                            foreach (var x in clients) if (x.Sid == sid) c = x;
+                            if (c == null && !bye)
+                            {
+                                c = new Client();
+                                c.Sid = sid;
+                                c.Address = ((IPEndPoint)sock.RemoteEndPoint).Address.ToString();
+                                c.Name = DeviceName(req.Header("user-agent"));
+                                clients.Add(c);
+                                isNew = true;
+                            }
+                        }
+                        if (c != null && bye) Drop(c);
+                        else if (c != null)
+                        {
+                            c.LastSeen = DateTime.Now;
+                            int rate;
+                            if (int.TryParse(Query(query, "rate"), out rate)) c.Rate = Math.Max(8000, Math.Min(96000, rate));
+                            bool muted = Query(query, "muted") == "1";
+                            string mic = Clip(Query(query, "mic"), 60);
+                            bool changed = muted != c.Muted || mic != c.Mic;
+                            c.Muted = muted;
+                            c.Mic = mic;
+                            if (isNew) Fire(Connected, c);
+                            else if (changed) Fire(Changed, c);
+                            if (len >= 2) OnPcm(c, data, len);
+                        }
+                        Respond(s, "204 No Content", "text/plain", new byte[0], "", keep);
+                        if (!keep) return;
+                        continue;
+                    }
+
+                    // sayfa dosyaları
+                    string file = route == "/" ? "index.html" : route.TrimStart('/');
+                    string type;
+                    switch (Path.GetExtension(file))
+                    {
+                        case ".html": type = "text/html; charset=utf-8"; break;
+                        case ".js": type = "text/javascript; charset=utf-8"; break;
+                        case ".json": type = "application/manifest+json"; break;
+                        case ".png": type = "image/png"; break;
+                        default: type = null; break;
+                    }
+                    byte[] body = type == null || file.Contains("/") ? null : Resource("web." + file);
+                    if (file == "icon.png") body = Resource("logo.png");
+                    if (body == null) { Respond(s, "404 Not Found", "text/plain", Encoding.UTF8.GetBytes("not found"), "", keep); }
+                    else Respond(s, "200 OK", type, body, "Cache-Control: no-cache\r\n", keep);
+                    if (!keep) return;
                 }
-                byte[] body = type == null || file.Contains("/") ? null : Resource("web." + file);
-                if (file == "icon.png") body = Resource("logo.png");
-                if (body == null) { Respond(s, "404 Not Found", "text/plain", Encoding.UTF8.GetBytes("not found"), ""); return; }
-                Respond(s, "200 OK", type, body, "Cache-Control: no-cache\r\n");
             }
             catch { }
             finally
@@ -221,17 +314,7 @@ namespace BrokenMicrophone
                 switch (op)
                 {
                     case 2:     // ses: 16 bit mono PCM
-                        c.LastAudio = DateTime.Now;
-                        int peak = 0;
-                        for (int i = 0; i + 1 < n; i += 2)
-                        {
-                            int v = (short)(payload[i] | (payload[i + 1] << 8));
-                            if (v < 0) v = -v;
-                            if (v > peak) peak = v;
-                        }
-                        c.Peak = peak / 32768f;
-                        var a = Audio;
-                        if (a != null && c.Rate > 0) a(c, payload, 0, n);
+                        OnPcm(c, payload, n);
                         break;
                     case 1:     // durum mesajı (JSON)
                         try
@@ -260,6 +343,21 @@ namespace BrokenMicrophone
                         break;
                 }
             }
+        }
+
+        void OnPcm(Client c, byte[] data, int n)
+        {
+            c.LastAudio = DateTime.Now;
+            int peak = 0;
+            for (int i = 0; i + 1 < n; i += 2)
+            {
+                int v = (short)(data[i] | (data[i + 1] << 8));
+                if (v < 0) v = -v;
+                if (v > peak) peak = v;
+            }
+            c.Peak = peak / 32768f;
+            var a = Audio;
+            if (a != null && c.Rate > 0) a(c, data, 0, n & ~1);
         }
 
         static string Clip(string s, int max) { s = s.Trim(); return s.Length > max ? s.Substring(0, max) : s; }
@@ -309,10 +407,10 @@ namespace BrokenMicrophone
             return r;
         }
 
-        static void Respond(Stream s, string status, string type, byte[] body, string extra)
+        static void Respond(Stream s, string status, string type, byte[] body, string extra, bool keep)
         {
             var h = Encoding.ASCII.GetBytes("HTTP/1.1 " + status + "\r\nContent-Type: " + type + "\r\nContent-Length: " + body.Length +
-                "\r\n" + extra + "X-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nConnection: close\r\n\r\n");
+                "\r\n" + extra + "X-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nConnection: " + (keep ? "keep-alive" : "close") + "\r\n\r\n");
             s.Write(h, 0, h.Length);
             s.Write(body, 0, body.Length);
             s.Flush();
