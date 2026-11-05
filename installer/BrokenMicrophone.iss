@@ -65,6 +65,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "..\bin\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "..\packaging\README.txt"; DestDir: "{app}"; Flags: ignoreversion
+; Android uygulaması: telefon sayfasındaki "Uygulamayı indir" bu dosyayı verir
+Source: "..\bin\BrokenMicrophone.apk"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"

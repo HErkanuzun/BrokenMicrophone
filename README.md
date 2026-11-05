@@ -33,6 +33,17 @@ Telefonun, tabletin ya da onlara bağlı kablosuz kulaklık, Wi-Fi üzerinden bi
 
 <br clear="right">
 
+## Android uygulaması
+
+iPhone'da sayfa yeter. Android'de istersen küçük bir uygulama da var (~90 KB, reklamsız, izin olarak sadece mikrofon ve bildirim ister):
+
+- **Ekran kapalıyken de çalışır.** Telefonu cebine koyabilirsin; bildirimden susturur ya da durdurursun.
+- **Kurulum internet istemez:** QR kodu okut, açılan sayfada **Uygulamayı indir**'e dokun. APK bilgisayardan gelir. Sonra sayfadaki **Uygulamada aç** adresi ve anahtarı uygulamaya verir.
+- APK ayrıca her sürümde `BrokenMicrophone-<sürüm>.apk` olarak [Releases](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest) sayfasında.
+- Bluetooth kulaklık mikrofonu, gürültü azaltma, yankı engelleme, otomatik ses seviyesi.
+- Bilgisayarın sertifikasını ilk bağlantıda hatırlar; sonra başka bir cihaz araya girerse bağlanmaz ve uyarır.
+- Android 7.0 ve üstü.
+
 ## Sanal mikrofon
 
 Bir sesin başka programlarda **mikrofon olarak** görünmesi için Windows'ta bir sanal ses sürücüsü gerekir. Broken Microphone sesi bu sürücünün girişine verir, diğer programlar da sürücünün çıkışını mikrofon olarak seçer.
@@ -44,7 +55,7 @@ Sanal mikrofon yoksa program yine çalışır ama ses sadece hoparlörden duyulu
 
 ## Kurulum
 
-1. [Son sürümden](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest) `BrokenMicrophone-1.0-Setup.exe`'yi indir ve çalıştır. Kurulum, telefonun bağlanabilmesi için Windows güvenlik duvarına **sadece bu programa, sadece özel ağlarda** izin ekler; bu yüzden yönetici izni ister.
+1. [Son sürümden](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest) `BrokenMicrophone-1.1-Setup.exe`'yi indir ve çalıştır. Kurulum, telefonun bağlanabilmesi için Windows güvenlik duvarına **sadece bu programa, sadece özel ağlarda** izin ekler; bu yüzden yönetici izni ister.
 2. Başlat menüsünden **Broken Microphone**'u aç.
 
 Kurulum istemiyorsan `Portable.zip`'i aç, içindeki exe'yi çalıştır. Telefon bağlanamazsa programdaki **Bağlanamıyor musun? → Güvenlik duvarı izni ver**.
@@ -76,6 +87,7 @@ Ek bir araç gerekmez; Windows'un kendi .NET Framework 4 derleyicisi kullanılı
 |---|---|
 | `build.bat` | Sadece programı derler → `bin\BrokenMicrophone.exe`. Telefon sayfası (`src\web`) exe'nin içine gömülür. |
 | `paketle.bat` | Programı derler, Inno Setup yoksa `winget` ile kurar, `dist\` klasörüne **Setup.exe**, **Portable.zip** ve **SHA256SUMS.txt** üretir |
+| `android\build.ps1` | Android uygulamasını derler → `bin\BrokenMicrophone.apk`. Gradle gerekmez: JDK 17 + Android SDK (build-tools, platform) yeter |
 | `scripts\make-icon.ps1` | Logoyu ve simgeyi yeniden çizer |
 
 GitHub'a `v1.0` gibi bir etiket gönderildiğinde aynı paketler Actions ile derlenip sürüm olarak yayımlanır.
@@ -105,15 +117,17 @@ Windows'ta bozuk ya da sorunlu bir şeyi bulup onunla yaşamanı sağlayan küç
 4. Tap the big microphone button and allow access.
 5. In Discord, Zoom, Teams, OBS or your game, pick the **virtual microphone**.
 
+**Android app (optional):** on Android there is also a small app (~90 KB) that keeps working with the screen off. Scan the QR code, tap **Download the app** on the page (the APK comes from your computer, no internet needed), install it, then tap **Open in app**. The APK is also attached to every [release](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest). It remembers the computer's certificate on first connection and refuses to connect if it changes. Android 7.0 or newer.
+
 The page works on iPhone, iPad and Android. A wireless headset connected to the phone shows up in its *Microphone* list. Noise suppression, echo cancellation and automatic gain can be toggled; mute shows on the computer too. Several phones can connect; the one that talks (or that you click) is used, and their audio is never mixed.
 
 **Virtual microphone:** for audio to show up as a microphone in other apps, Windows needs a virtual audio driver. For now use the free [VB-CABLE](https://vb-audio.com/Cable/) and pick **CABLE Output** as the microphone. Our own open-source **Broken Microphone** driver is coming once it is signed by Microsoft. Without a virtual microphone the audio only plays on the speakers.
 
-**Install:** download `BrokenMicrophone-1.0-Setup.exe` from the [latest release](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest). The setup asks for administrator rights because it adds a Windows Firewall rule that allows **only this app, only on private networks**. A portable ZIP is also available; if the phone can't connect, use *Can't connect? → Allow through the firewall* in the app.
+**Install:** download `BrokenMicrophone-1.1-Setup.exe` from the [latest release](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest). The setup asks for administrator rights because it adds a Windows Firewall rule that allows **only this app, only on private networks**. A portable ZIP is also available; if the phone can't connect, use *Can't connect? → Allow through the firewall* in the app.
 
 **Privacy:** audio only travels between the phone and the computer on your local network, encrypted with TLS. Nothing is sent to the internet. Nobody can connect without the random key in the QR code. See [SECURITY.md](SECURITY.md).
 
-**Build:** `build.bat` builds the exe with the .NET Framework compiler that ships with Windows; the phone page in `src\web` is embedded in the exe. `paketle.bat` also builds the installer, portable ZIP and checksums.
+**Build:** `build.bat` builds the exe with the .NET Framework compiler that ships with Windows; the phone page in `src\web` is embedded in the exe. `android\build.ps1` builds the Android app without Gradle (JDK 17 + Android SDK). `paketle.bat` also builds the installer, portable ZIP and checksums.
 
 **The Broken family:** [Broken Screen Resizer](https://github.com/HErkanuzun/BrokenScreenResizer) · [Broken Disk Resizer](https://github.com/HErkanuzun/BrokenDiskResizer) · [Broken Space Finder](https://github.com/HErkanuzun/BrokenSpaceFinder) · **Broken Microphone** · [Broken Hub](https://github.com/HErkanuzun/BrokenHub) (installs, updates and opens all the Broken tools from one place).
 

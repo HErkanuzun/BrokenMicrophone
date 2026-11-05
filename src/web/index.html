@@ -65,6 +65,12 @@
     flex: 1; min-height: 48px; border-radius: 10px; border: 1px solid var(--border); background: var(--field);
     color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
   }
+  a.btn {
+    flex: 1; min-height: 48px; border-radius: 10px; border: 1px solid var(--border); background: var(--field);
+    color: var(--text); font-weight: 600; display: flex; align-items: center; justify-content: center;
+    text-decoration: none; text-align: center; padding: 0 10px;
+  }
+  a.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   button.btn.on { background: var(--danger); border-color: var(--danger); color: #fff; }
   button.btn:disabled { opacity: .45; }
 
@@ -114,6 +120,15 @@
     <button class="btn" id="stop" disabled data-t="stop"></button>
   </div>
 
+  <section class="card hidden" id="android">
+    <h2 lang="en" data-t="androidTitle"></h2>
+    <p class="note" data-t="androidNote"></p>
+    <div class="row">
+      <a class="btn primary" id="openApp" data-t="openApp"></a>
+      <a class="btn hidden" id="getApp" data-t="getApp"></a>
+    </div>
+  </section>
+
   <section class="card">
     <h2 data-t="settings"></h2>
     <label class="field"><span data-t="micLabel"></span>
@@ -148,7 +163,11 @@
     micError: ['Mikrofon açılamadı: ', 'Couldn\'t open the microphone: '],
     tapMute: ['Sessize almak için dokun', 'Tap to mute'], tapUnmute: ['Sesi açmak için dokun', 'Tap to unmute'],
     stopped: ['Durduruldu. Yeniden başlatmak için dokun.', 'Stopped. Tap to start again.'],
-    background: ['Sayfa arka plana geçti; ses duraklamış olabilir.', 'The page went to the background; audio may have paused.']
+    background: ['Sayfa arka plana geçti; ses duraklamış olabilir.', 'The page went to the background; audio may have paused.'],
+    androidTitle: ['Android uygulaması', 'Android app'],
+    androidNote: ['Uygulama ekran kapalıyken de çalışır. Yüklüyse "Uygulamada aç"a dokun; değilse önce bilgisayardan indir ve kur.',
+                  'The app keeps working with the screen off. If it\'s installed, tap "Open in app"; if not, download it from the computer and install it first.'],
+    openApp: ['Uygulamada aç', 'Open in app'], getApp: ['Uygulamayı indir', 'Download the app']
   };
   function t(k) { return (T[k] || ['', ''])[tr ? 0 : 1]; }
   document.documentElement.lang = tr ? 'tr' : 'en';
@@ -172,6 +191,25 @@
     opts[k].addEventListener('change', function () { store(k, opts[k].checked ? '1' : '0'); if (running) restartMic(); });
   });
   var savedDevice = store('device') || '';
+
+  // Android: yerel uygulamaya geçiş (ekran kapalıyken de çalışır). APK bilgisayardan iner, internet gerekmez.
+  if (/android/i.test(navigator.userAgent) && key) {
+    var apkUrl = '/app.apk?k=' + encodeURIComponent(key);
+    var openApp = $('openApp'), getApp = $('getApp');
+    getApp.href = apkUrl;
+    getApp.setAttribute('download', 'BrokenMicrophone.apk');
+    var fallback = 'https://github.com/HErkanuzun/BrokenMicrophone/releases/latest';
+    $('android').classList.remove('hidden');
+    fetch(apkUrl, { method: 'HEAD', cache: 'no-store' }).then(function (r) {
+      if (r.ok) { getApp.classList.remove('hidden'); fallback = location.origin + apkUrl; }
+    }).catch(function () {}).then(function () {
+      openApp.href = 'intent://' + location.host + '/?k=' + encodeURIComponent(key) +
+        '#Intent;scheme=brokenmic;package=io.github.herkanuzun.brokenmicrophone;S.browser_fallback_url=' +
+        encodeURIComponent(fallback) + ';end';
+    });
+    openApp.href = 'brokenmic://' + location.host + '/?k=' + encodeURIComponent(key);
+    openApp.addEventListener('click', function () { if (running) stop(); });
+  }
 
   function setStatus(kind, text) { $('status').className = 'status ' + kind; $('statusText').textContent = text; }
 

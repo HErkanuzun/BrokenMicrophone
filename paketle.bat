@@ -7,6 +7,9 @@ setlocal
 echo [1/3] Program derleniyor...
 call build.bat ci
 if errorlevel 1 goto :fail
+rem Android uygulamasi (JDK 17 + Android SDK varsa; yoksa APK olmadan devam edilir)
+powershell -NoProfile -ExecutionPolicy Bypass -File android\build.ps1
+if errorlevel 1 echo        Android uygulamasi derlenemedi; APK olmadan devam ediliyor.
 
 rem Surum numarasi AssemblyInfo.cs'ten okunur
 for /f "tokens=2 delims=()" %%a in ('findstr /c:"AssemblyInformationalVersion" src\AssemblyInfo.cs') do set VER=%%~a

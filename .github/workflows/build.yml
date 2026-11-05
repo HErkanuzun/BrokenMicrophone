@@ -19,6 +19,26 @@ jobs:
         shell: cmd
         run: build.bat ci
 
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Android uygulaması. Yayın anahtarı gizli değişkenlerde (ANDROID_KEYSTORE base64, ANDROID_KEYSTORE_PASS).
+      # Anahtar yoksa: etiketli yayında APK atlanır, diğer derlemelerde deneme anahtarıyla imzalanır.
+      - name: Build Android app
+        shell: pwsh
+        env:
+          BM_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          BM_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+        run: |
+          if (-not $env:BM_KEYSTORE -and '${{ github.ref }}'.StartsWith('refs/tags/v')) {
+            Write-Warning 'ANDROID_KEYSTORE secret is missing: release without the APK.'
+            exit 0
+          }
+          ./android/build.ps1
+
       - name: Install Inno Setup
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -86,7 +106,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: BrokenMicrophone
-          path: bin/BrokenMicrophone.exe
+          path: |
+            bin/BrokenMicrophone.exe
+            bin/BrokenMicrophone.apk
 
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
@@ -98,4 +120,5 @@ jobs:
           files: |
             dist/BrokenMicrophone-*-Setup.exe
             dist/BrokenMicrophone-*-Portable.zip
+            dist/BrokenMicrophone-*.apk
             dist/SHA256SUMS.txt

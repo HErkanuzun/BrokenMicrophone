@@ -193,6 +193,28 @@ namespace BrokenMicrophone
                         return;
                     }
 
+                    // Android uygulaması: kurulumla birlikte gelen APK telefona bilgisayardan iner
+                    if (route == "/app.apk")
+                    {
+                        string apk = ApkPath();
+                        if (Query(query, "k") != key || apk == null)
+                        {
+                            Respond(s, Query(query, "k") != key ? "403 Forbidden" : "404 Not Found", "text/plain", new byte[0], "", keep);
+                            if (!keep) return;
+                            continue;
+                        }
+                        byte[] apkBytes = req.Method == "HEAD" ? null : File.ReadAllBytes(apk);
+                        long size = new FileInfo(apk).Length;
+                        var apkHead = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/vnd.android.package-archive\r\n" +
+                            "Content-Disposition: attachment; filename=\"BrokenMicrophone.apk\"\r\nContent-Length: " + size +
+                            "\r\nCache-Control: no-cache\r\nConnection: " + (keep ? "keep-alive" : "close") + "\r\n\r\n");
+                        s.Write(apkHead, 0, apkHead.Length);
+                        if (apkBytes != null) s.Write(apkBytes, 0, apkBytes.Length);
+                        s.Flush();
+                        if (!keep) return;
+                        continue;
+                    }
+
                     // anahtar doğru mu (sayfa WebSocket açılamayınca sorar)
                     if (route == "/check")
                     {
@@ -343,6 +365,17 @@ namespace BrokenMicrophone
                         break;
                 }
             }
+        }
+
+        /// <summary>Programın yanındaki BrokenMicrophone.apk (kurulum ve taşınabilir sürümle gelir).</summary>
+        public static string ApkPath()
+        {
+            try
+            {
+                string p = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BrokenMicrophone.apk");
+                return File.Exists(p) ? p : null;
+            }
+            catch { return null; }
         }
 
         void OnPcm(Client c, byte[] data, int n)

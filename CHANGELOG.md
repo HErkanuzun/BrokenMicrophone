@@ -2,6 +2,13 @@
 
 All notable changes to Broken Microphone. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.1] - 2026-11-06
+
+### Added
+- Android app (APK, ~90 KB): keeps sending audio with the screen off, with a notification to mute or stop. Bluetooth headset microphones, noise suppression, echo cancellation and automatic gain. It remembers the computer's certificate on first connection and refuses to connect if it changes.
+- The computer hands the APK to the phone: on Android the page shows **Download the app** and **Open in app** (passes the address and key to the app). No internet needed.
+- The APK is also attached to each release as `BrokenMicrophone-<version>.apk`.
+
 ## [1.0] - 2026-11-06
 
 First release.
@@ -17,4 +24,5 @@ First release.
 - Setup adds a Windows Firewall rule for this app on private networks only; the portable version can add it from "Can't connect?".
 - Turkish and English.
 
+[1.1]: https://github.com/HErkanuzun/BrokenMicrophone/releases/tag/v1.1
 [1.0]: https://github.com/HErkanuzun/BrokenMicrophone/releases/tag/v1.0
