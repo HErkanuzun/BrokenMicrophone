@@ -5,7 +5,9 @@
 <p align="center"><b>Bilgisayarının mikrofonu yok ya da bozuk mu? Telefonunu mikrofon yap.</b><br>
 Telefonun, tabletin ya da onlara bağlı kablosuz kulaklık, Wi-Fi üzerinden bilgisayarın mikrofonu olur. Telefona uygulama kurman gerekmez: QR kodu okut, tarayıcıda açılan sayfada mikrofona bas.</p>
 
-<p align="center"><a href="#english">English</a> · <a href="https://github.com/HErkanuzun/BrokenMicrophone/releases/latest">İndir / Download</a> · <a href="CHANGELOG.md">Sürüm geçmişi</a></p>
+<p align="center"><a href="#english">English</a> · <a href="https://github.com/HErkanuzun/BrokenMicrophone/releases/latest">Windows: İndir / Download</a> · <a href="https://herkanuzun.github.io/BrokenMicrophone/"><b>📱 Android uygulaması / Android app</b></a> · <a href="CHANGELOG.md">Sürüm geçmişi</a></p>
+
+<p align="center">Telefondan indirmek için bu adresi telefonda aç · Open on your phone: <b><a href="https://herkanuzun.github.io/BrokenMicrophone/">herkanuzun.github.io/BrokenMicrophone</a></b></p>
 
 ![Broken Microphone](docs/images/screenshot-tr.png)
 
