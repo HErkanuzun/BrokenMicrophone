@@ -9,6 +9,7 @@ First release.
 ### Added
 - Use a phone, tablet or the wireless headset connected to them as the computer's microphone over Wi-Fi. No app on the phone: scan the QR code and the page opens in the browser (iPhone, iPad, Android).
 - Encrypted local connection (TLS) on one port; a random key in the QR code keeps other devices on the network out.
+- If the browser refuses the WebSocket (some iOS versions do with a self-signed certificate), the page sends audio with HTTPS requests instead and remembers that for the device.
 - Phone page: microphone picker (wireless headsets included), noise suppression, echo cancellation, automatic gain, mute, level meter, keeps the screen on, reconnects by itself.
 - Computer window: QR code, connected devices, live level, output picker that selects a virtual microphone (VB-CABLE) automatically, optional listening on the speakers.
 - Several phones can connect; the one that talks or that you click is used, audio is never mixed.
