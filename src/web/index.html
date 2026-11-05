@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16181d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Broken Mic">
+<link rel="icon" href="/icon.png">
+<link rel="apple-touch-icon" href="/icon.png">
+<title>Broken Microphone</title>
+<style>
+  :root {
+    --bg: #16181d; --card: #1f2228; --field: #282c34; --border: #343942;
+    --text: #eaedf2; --sub: #8e96a3; --accent: #2ec4b0; --on-accent: #081e1b;
+    --danger: #f0565b; --warn: #f5a524;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 16px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh; min-height: 100dvh;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+    display: flex; flex-direction: column; align-items: center;
+  }
+  main { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 14px; }
+  header { display: flex; align-items: center; gap: 12px; }
+  header img { width: 40px; height: 40px; border-radius: 10px; }
+  header h1 { font-size: 18px; margin: 0; }
+  header p { margin: 0; color: var(--sub); font-size: 13px; }
+
+  .status {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start; font-size: 14px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--sub); flex: none; margin-top: 6px; }
+  .status.ok .dot { background: var(--accent); box-shadow: 0 0 0 4px rgba(46,196,176,.18); }
+  .status.warn .dot { background: var(--warn); }
+  .status.err .dot { background: var(--danger); }
+
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 18px 0 6px; }
+  .mic {
+    position: relative; width: 196px; height: 196px; border-radius: 50%; border: 0; cursor: pointer;
+    background: var(--field); color: var(--text); display: grid; place-items: center;
+    transition: background .2s, transform .1s; font: inherit;
+  }
+  .mic:active { transform: scale(.97); }
+  .mic svg { width: 76px; height: 76px; }
+  .mic .ring {
+    position: absolute; inset: -10px; border-radius: 50%; border: 3px solid var(--accent);
+    opacity: 0; transform: scale(1); transition: transform .08s linear, opacity .2s; pointer-events: none;
+  }
+  .mic.live { background: var(--accent); color: var(--on-accent); }
+  .mic.live .ring { opacity: .55; }
+  .mic.muted { background: var(--danger); color: #fff; }
+  .mic.busy { opacity: .6; }
+  .hint { color: var(--sub); font-size: 14px; text-align: center; min-height: 20px; margin: 0; }
+
+  .meter { width: 100%; height: 8px; border-radius: 4px; background: var(--field); overflow: hidden; }
+  .meter i { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 4px; transition: width .06s linear; }
+
+  .row { display: flex; gap: 10px; }
+  button.btn {
+    flex: 1; min-height: 48px; border-radius: 10px; border: 1px solid var(--border); background: var(--field);
+    color: var(--text); font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.btn.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+  button.btn:disabled { opacity: .45; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .card h2 { margin: 0; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--sub); }
+  label.field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--sub); }
+  select {
+    width: 100%; min-height: 44px; border-radius: 10px; border: 1px solid var(--border); background: var(--field);
+    color: var(--text); font: inherit; padding: 0 12px;
+  }
+  .switch { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 15px; min-height: 36px; }
+  .switch input { appearance: none; -webkit-appearance: none; width: 46px; height: 28px; border-radius: 14px; background: var(--field); border: 1px solid var(--border); position: relative; flex: none; margin: 0; cursor: pointer; }
+  .switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--sub); transition: left .15s, background .15s; }
+  .switch input:checked { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked::after { left: 21px; background: #fff; }
+  .note { color: var(--sub); font-size: 13px; margin: 0; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="/icon.png" alt="">
+    <div>
+      <h1>Broken Microphone</h1>
+      <p data-t="tagline"></p>
+    </div>
+  </header>
+
+  <div id="status" class="status"><span class="dot"></span><span id="statusText"></span></div>
+
+  <section class="stage">
+    <button id="mic" class="mic" aria-label="Mikrofon">
+      <span class="ring" id="ring"></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="9" y="2.5" width="6" height="12" rx="3"/>
+        <path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/><path d="M8.5 21h7"/>
+        <path id="slash" class="hidden" d="M3 3l18 18"/>
+      </svg>
+    </button>
+    <p class="hint" id="hint"></p>
+    <div class="meter" aria-hidden="true"><i id="meter"></i></div>
+  </section>
+
+  <div class="row">
+    <button class="btn" id="mute" disabled data-t="mute"></button>
+    <button class="btn" id="stop" disabled data-t="stop"></button>
+  </div>
+
+  <section class="card">
+    <h2 data-t="settings"></h2>
+    <label class="field"><span data-t="micLabel"></span>
+      <select id="device"><option value="" data-t="defaultMic"></option></select>
+    </label>
+    <label class="switch"><span data-t="ns"></span><input type="checkbox" id="ns" checked></label>
+    <label class="switch"><span data-t="ec"></span><input type="checkbox" id="ec" checked></label>
+    <label class="switch"><span data-t="agc"></span><input type="checkbox" id="agc" checked></label>
+    <p class="note" data-t="tip"></p>
+  </section>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var tr = (navigator.language || '').toLowerCase().indexOf('tr') === 0;
+  var T = {
+    tagline: ['Telefonun bilgisayarın mikrofonu olsun', 'Your phone as the computer\'s microphone'],
+    mute: ['Sessize al', 'Mute'], unmute: ['Sesi aç', 'Unmute'], stop: ['Durdur', 'Stop'],
+    settings: ['Ayarlar', 'Settings'], micLabel: ['Mikrofon', 'Microphone'], defaultMic: ['Varsayılan mikrofon', 'Default microphone'],
+    ns: ['Gürültü azaltma', 'Noise suppression'], ec: ['Yankı engelleme', 'Echo cancellation'], agc: ['Otomatik ses seviyesi', 'Automatic gain'],
+    tip: ['Kablosuz kulaklık bağlıysa listede görünür. Telefon kilitlenince ses kesilebilir: ekranı açık tut.',
+          'A connected wireless headset shows up in the list. Audio may stop when the phone locks: keep the screen on.'],
+    tapStart: ['Başlatmak için dokun', 'Tap to start'], ready: ['Bilgisayar hazır. Mikrofonu başlat.', 'The computer is ready. Start the microphone.'],
+    live: ['Bilgisayara ses gidiyor', 'Sending audio to the computer'], muted: ['Sessizde: bilgisayar seni duymuyor', 'Muted: the computer can\'t hear you'],
+    connecting: ['Bilgisayara bağlanılıyor…', 'Connecting to the computer…'], reconnecting: ['Bağlantı koptu, yeniden deneniyor…', 'Connection lost, retrying…'],
+    noKey: ['Bağlantı anahtarı yok. Bilgisayardaki Broken Microphone penceresindeki QR kodu okut.', 'No connection key. Scan the QR code in the Broken Microphone window on your computer.'],
+    badKey: ['Anahtar eşleşmedi. Bilgisayardaki QR kodu yeniden okut.', 'The key doesn\'t match. Scan the QR code on your computer again.'],
+    insecure: ['Sayfa güvenli bağlantıyla (https) açılmadı. QR kodu yeniden okut.', 'The page wasn\'t opened over a secure connection (https). Scan the QR code again.'],
+    noMedia: ['Bu tarayıcı mikrofona erişemiyor. iPhone/iPad\'de Safari, Android\'de Chrome kullan.', 'This browser can\'t access the microphone. Use Safari on iPhone/iPad or Chrome on Android.'],
+    denied: ['Mikrofon izni verilmedi. Tarayıcı ayarlarından bu siteye mikrofon izni ver ve tekrar dene.', 'Microphone permission was denied. Allow the microphone for this site in the browser settings and try again.'],
+    micError: ['Mikrofon açılamadı: ', 'Couldn\'t open the microphone: '],
+    tapMute: ['Sessize almak için dokun', 'Tap to mute'], tapUnmute: ['Sesi açmak için dokun', 'Tap to unmute'],
+    stopped: ['Durduruldu. Yeniden başlatmak için dokun.', 'Stopped. Tap to start again.'],
+    background: ['Sayfa arka plana geçti; ses duraklamış olabilir.', 'The page went to the background; audio may have paused.']
+  };
+  function t(k) { return (T[k] || ['', ''])[tr ? 0 : 1]; }
+  document.documentElement.lang = tr ? 'tr' : 'en';
+  Array.prototype.forEach.call(document.querySelectorAll('[data-t]'), function (el) { el.textContent = t(el.getAttribute('data-t')); });
+
+  var $ = function (id) { return document.getElementById(id); };
+  var micBtn = $('mic'), ring = $('ring'), meter = $('meter'), hint = $('hint'), slash = $('slash');
+  var muteBtn = $('mute'), stopBtn = $('stop'), deviceSel = $('device');
+  var opts = { ns: $('ns'), ec: $('ec'), agc: $('agc') };
+
+  function store(k, v) { try { if (v === undefined) return localStorage.getItem('bm-' + k); localStorage.setItem('bm-' + k, v); } catch (e) { return null; } }
+
+  // QR kodundaki anahtar adres çubuğundan silinir ve saklanır
+  var key = (location.hash.match(/k=([a-z0-9]+)/i) || [])[1];
+  if (key) { store('key', key); try { history.replaceState(null, '', location.pathname); } catch (e) {} }
+  else key = store('key');
+
+  Object.keys(opts).forEach(function (k) {
+    var v = store(k);
+    if (v !== null) opts[k].checked = v === '1';
+    opts[k].addEventListener('change', function () { store(k, opts[k].checked ? '1' : '0'); if (running) restartMic(); });
+  });
+  var savedDevice = store('device') || '';
+
+  function setStatus(kind, text) { $('status').className = 'status ' + kind; $('statusText').textContent = text; }
+
+  var ctx = null, stream = null, source = null, node = null, sink = null, ws = null;
+  var running = false, muted = false, wsOpen = false, retryTimer = null, pingTimer = null, wakeLock = null, level = 0;
+
+  function refreshUi() {
+    micBtn.className = 'mic' + (running ? (muted ? ' muted' : ' live') : '');
+    slash.setAttribute('class', muted ? '' : 'hidden');
+    muteBtn.disabled = stopBtn.disabled = !running;
+    muteBtn.textContent = muted ? t('unmute') : t('mute');
+    muteBtn.className = 'btn' + (muted ? ' on' : '');
+    if (!running) hint.textContent = t('tapStart');
+    else hint.textContent = wsOpen ? (muted ? t('tapUnmute') : t('tapMute')) : t('connecting');
+    if (running && wsOpen) setStatus(muted ? 'warn' : 'ok', muted ? t('muted') : t('live'));
+  }
+
+  // ---------------------------------------------------------------- bağlantı
+  function connect() {
+    if (!running) return;
+    clearTimeout(retryTimer);
+    try { ws = new WebSocket('wss://' + location.host + '/ws?k=' + encodeURIComponent(key)); }
+    catch (e) { retry(); return; }
+    ws.binaryType = 'arraybuffer';
+    var opened = false;
+    ws.onopen = function () { opened = true; wsOpen = true; hello(); refreshUi(); };
+    ws.onclose = function () {
+      wsOpen = false;
+      if (!running) return;
+      if (!opened) { setStatus('err', t('badKey')); }
+      else setStatus('warn', t('reconnecting'));
+      refreshUi();
+      retry();
+    };
+    ws.onerror = function () {};
+  }
+  function retry() { clearTimeout(retryTimer); retryTimer = setTimeout(connect, 1500); }
+  function send(obj) { if (ws && ws.readyState === 1) ws.send(typeof obj === 'string' ? obj : JSON.stringify(obj)); }
+  function hello() {
+    var track = stream && stream.getAudioTracks()[0];
+    send({ t: 'hello', rate: ctx ? ctx.sampleRate : 48000, mic: track ? track.label : '', muted: muted });
+  }
+
+  // ---------------------------------------------------------------- mikrofon
+  function constraints() {
+    var a = { echoCancellation: opts.ec.checked, noiseSuppression: opts.ns.checked, autoGainControl: opts.agc.checked, channelCount: 1 };
+    if (deviceSel.value) a.deviceId = { exact: deviceSel.value };
+    return { audio: a, video: false };
+  }
+
+  function openMic() {
+    return navigator.mediaDevices.getUserMedia(constraints()).catch(function (e) {
+      // seçili cihaz artık yoksa varsayılana dön
+      if (deviceSel.value && e && e.name === 'OverconstrainedError') { deviceSel.value = ''; return navigator.mediaDevices.getUserMedia(constraints()); }
+      throw e;
+    }).then(function (s) {
+      stream = s;
+      var track = s.getAudioTracks()[0];
+      if (track) track.onended = function () { if (running) restartMic(); };
+      source = ctx.createMediaStreamSource(s);
+      source.connect(node);
+      listDevices();
+      hello();
+    });
+  }
+
+  function closeMic() {
+    if (source) { try { source.disconnect(); } catch (e) {} source = null; }
+    if (stream) { stream.getTracks().forEach(function (tr) { tr.stop(); }); stream = null; }
+  }
+
+  function restartMic() { closeMic(); openMic().catch(micFailed); }
+
+  function micFailed(e) {
+    var name = e && e.name;
+    setStatus('err', name === 'NotAllowedError' || name === 'SecurityError' ? t('denied') : t('micError') + (e && (e.message || name) || ''));
+    stop();
+  }
+
+  function listDevices() {
+    if (!navigator.mediaDevices.enumerateDevices) return;
+    navigator.mediaDevices.enumerateDevices().then(function (list) {
+      var current = stream && stream.getAudioTracks()[0];
+      var currentId = current && current.getSettings ? current.getSettings().deviceId : '';
+      var keep = deviceSel.value || savedDevice;
+      while (deviceSel.options.length > 1) deviceSel.remove(1);
+      list.forEach(function (d) {
+        if (d.kind !== 'audioinput' || d.deviceId === 'default' || d.deviceId === 'communications' || !d.deviceId) return;
+        var o = document.createElement('option');
+        o.value = d.deviceId;
+        o.textContent = d.label || ('Mikrofon ' + deviceSel.options.length);
+        deviceSel.appendChild(o);
+      });
+      var found = false;
+      for (var i = 0; i < deviceSel.options.length; i++) if (deviceSel.options[i].value === keep) found = true;
+      deviceSel.value = found ? keep : '';
+      if (!found && currentId) deviceSel.value = '';
+    });
+  }
+  deviceSel.addEventListener('change', function () { savedDevice = deviceSel.value; store('device', deviceSel.value); if (running) restartMic(); });
+  if (navigator.mediaDevices && navigator.mediaDevices.addEventListener)
+    navigator.mediaDevices.addEventListener('devicechange', function () { if (running) listDevices(); });
+
+  function start() {
+    if (running) return;
+    if (!window.isSecureContext) { setStatus('err', t('insecure')); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.AudioWorkletNode) { setStatus('err', t('noMedia')); return; }
+    if (!key) { setStatus('err', t('noKey')); return; }
+    running = true; muted = false;
+    micBtn.classList.add('busy');
+    var AC = window.AudioContext || window.webkitAudioContext;
+    ctx = new AC({ latencyHint: 'interactive' });
+    ctx.audioWorklet.addModule('/worklet.js').then(function () {
+      node = new AudioWorkletNode(ctx, 'tap', { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: 'explicit' });
+      node.port.onmessage = function (e) {
+        var d = e.data;
+        level = Math.max(level * 0.8, d.peak);
+        if (!muted && ws && ws.readyState === 1 && ws.bufferedAmount < ctx.sampleRate) ws.send(d.pcm);
+      };
+      // düğüm çalışsın diye sessiz bir çıkışa bağlanır (telefonda geri ses olmaz)
+      sink = ctx.createGain(); sink.gain.value = 0;
+      node.connect(sink); sink.connect(ctx.destination);
+      return ctx.resume();
+    }).then(openMic).then(function () {
+      micBtn.classList.remove('busy');
+      connect();
+      clearInterval(pingTimer);
+      pingTimer = setInterval(function () { send({ t: 'ping', muted: muted }); }, 4000);
+      keepAwake();
+      refreshUi();
+    }).catch(function (e) { micBtn.classList.remove('busy'); micFailed(e); });
+    refreshUi();
+  }
+
+  function stop() {
+    running = false; muted = false; wsOpen = false;
+    clearTimeout(retryTimer); clearInterval(pingTimer);
+    if (ws) { ws.onclose = null; try { ws.close(); } catch (e) {} ws = null; }
+    closeMic();
+    if (ctx) { try { ctx.close(); } catch (e) {} ctx = null; }
+    node = null; sink = null;
+    if (wakeLock) { try { wakeLock.release(); } catch (e) {} wakeLock = null; }
+    level = 0;
+    micBtn.classList.remove('busy');
+    refreshUi();
+  }
+
+  function setMuted(m) {
+    muted = m;
+    send({ t: 'state', muted: muted });
+    refreshUi();
+  }
+
+  function keepAwake() {
+    if (!('wakeLock' in navigator) || !running) return;
+    navigator.wakeLock.request('screen').then(function (l) { wakeLock = l; }).catch(function () {});
+  }
+
+  micBtn.addEventListener('click', function () {
+    if (!running) start();
+    else setMuted(!muted);
+  });
+  muteBtn.addEventListener('click', function () { setMuted(!muted); });
+  stopBtn.addEventListener('click', function () { stop(); setStatus('', t('stopped')); });
+
+  document.addEventListener('visibilitychange', function () {
+    if (!running) return;
+    if (document.visibilityState === 'visible') {
+      if (ctx && ctx.state !== 'running') ctx.resume();
+      var tr0 = stream && stream.getAudioTracks()[0];
+      if (!tr0 || tr0.readyState === 'ended') restartMic();
+      keepAwake();
+      if (!ws || ws.readyState > 1) connect();
+    }
+  });
+
+  // seviye göstergesi
+  (function draw() {
+    var v = running && !muted ? Math.min(1, level * 1.6) : 0;
+    meter.style.width = (v * 100).toFixed(1) + '%';
+    ring.style.transform = 'scale(' + (1 + v * 0.18).toFixed(3) + ')';
+    level *= 0.92;
+    requestAnimationFrame(draw);
+  })();
+
+  if (!window.isSecureContext) setStatus('err', t('insecure'));
+  else if (!key) setStatus('err', t('noKey'));
+  else setStatus('', t('ready'));
+  refreshUi();
+})();
+</script>
+</body>
+</html>
