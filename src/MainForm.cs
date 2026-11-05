@@ -641,10 +641,7 @@ namespace BrokenMicrophone
         // ------------------------------------------------------------------ yardım
         void ShowAndroid()
         {
-            string url = "";
-            if (server != null && addresses.Count > 0)
-                url = "https://" + SelectedAddress.Ip + ":" + server.Port + "/app.apk?k=" + cfg.Key;
-            using (var d = new AndroidDialog(url, Server.Apk())) d.ShowDialog(this);
+            using (var d = new AndroidDialog()) d.ShowDialog(this);
         }
 
         void ShowConnectHelp()

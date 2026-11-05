@@ -193,28 +193,6 @@ namespace BrokenMicrophone
                         return;
                     }
 
-                    // Android uygulaması: kurulumla birlikte gelen APK telefona bilgisayardan iner
-                    if (route == "/app.apk")
-                    {
-                        byte[] apkData = Apk();
-                        if (Query(query, "k") != key || apkData == null)
-                        {
-                            Respond(s, Query(query, "k") != key ? "403 Forbidden" : "404 Not Found", "text/plain", new byte[0], "", keep);
-                            if (!keep) return;
-                            continue;
-                        }
-                        byte[] apkBytes = req.Method == "HEAD" ? null : apkData;
-                        long size = apkData.Length;
-                        var apkHead = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/vnd.android.package-archive\r\n" +
-                            "Content-Disposition: attachment; filename=\"BrokenMicrophone.apk\"\r\nContent-Length: " + size +
-                            "\r\nCache-Control: no-cache\r\nConnection: " + (keep ? "keep-alive" : "close") + "\r\n\r\n");
-                        s.Write(apkHead, 0, apkHead.Length);
-                        if (apkBytes != null) s.Write(apkBytes, 0, apkBytes.Length);
-                        s.Flush();
-                        if (!keep) return;
-                        continue;
-                    }
-
                     // anahtar doğru mu (sayfa WebSocket açılamayınca sorar)
                     if (route == "/check")
                     {
@@ -288,7 +266,7 @@ namespace BrokenMicrophone
                     byte[] body = type == null || file.Contains("/") ? null : Resource("web." + file);
                     if (file == "icon.png") body = Resource("logo.png");
                     if (body == null) { Respond(s, "404 Not Found", "text/plain", Encoding.UTF8.GetBytes("not found"), "", keep); }
-                    else Respond(s, "200 OK", type, body, "Cache-Control: no-cache\r\n", keep);
+                    else Respond(s, "200 OK", type, body, file == "index.html" ? PageHeaders(req.Header("host")) : "Cache-Control: no-cache\r\n", keep);
                     if (!keep) return;
                 }
             }
@@ -367,17 +345,29 @@ namespace BrokenMicrophone
             }
         }
 
-        /// <summary>Android uygulaması: exe'nin içine gömülü APK (yoksa programın yanındaki BrokenMicrophone.apk).</summary>
-        public static byte[] Apk()
+        // Telefon sayfasının güvenlik başlıkları: sadece kendi betiği çalışır (özetiyle), sadece bu bilgisayara
+        // bağlanır, başka sitelerin çerçevesine giremez, kamera/konum gibi izinler kapalı, önbelleğe yazılmaz.
+        static string scriptHash;
+        static string PageHeaders(string host)
         {
-            byte[] b = Resource("app.apk");
-            if (b != null) return b;
-            try
+            if (scriptHash == null)
             {
-                string p = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BrokenMicrophone.apk");
-                return File.Exists(p) ? File.ReadAllBytes(p) : null;
+                string html = Encoding.UTF8.GetString(Resource("web.index.html") ?? new byte[0]);
+                int a = html.IndexOf("<script>"), b = html.IndexOf("</script>");
+                string js = a >= 0 && b > a ? html.Substring(a + 8, b - a - 8) : "";
+                js = js.Replace("\r\n", "\n").Replace("\r", "\n");   // tarayıcı satır sonlarını LF yapıp özetler
+                using (var sha = SHA256.Create())
+                    scriptHash = Convert.ToBase64String(sha.ComputeHash(Encoding.UTF8.GetBytes(js)));
             }
-            catch { return null; }
+            if (host.IndexOfAny(new[] { ' ', ';', '\r', '\n', '\'' }) >= 0) host = "";
+            return "Content-Security-Policy: default-src 'none'; script-src 'self' 'sha256-" + scriptHash + "'; " +
+                   "style-src 'unsafe-inline'; img-src 'self' data:; connect-src 'self'" + (host != "" ? " wss://" + host : "") + "; " +
+                   "manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'\r\n" +
+                   "Permissions-Policy: microphone=(self), camera=(), geolocation=(), usb=(), payment=()\r\n" +
+                   "Cross-Origin-Opener-Policy: same-origin\r\n" +
+                   "Cross-Origin-Resource-Policy: same-origin\r\n" +
+                   "X-Frame-Options: DENY\r\n" +
+                   "Cache-Control: no-store\r\n";
         }
 
         void OnPcm(Client c, byte[] data, int n)

@@ -15,8 +15,9 @@ TÜRKÇE
 5. Discord, Zoom, OBS ya da oyunda mikrofon olarak sanal mikrofonu seç
    (VB-CABLE kuruluysa "CABLE Output").
 
-Android: sayfadaki "Uygulamayı indir" ile uygulamayı kur (BrokenMicrophone.apk
-bilgisayardan gelir), sonra "Uygulamada aç". Ekran kapalıyken de çalışır.
+Android: sayfadaki "GitHub'dan indir" ile uygulamayı kur
+(https://herkanuzun.github.io/BrokenMicrophone/), sonra "Uygulamada aç".
+Ekran kapalıyken de çalışır.
 
 Kurulumsuz (portable) sürümde Windows güvenlik duvarı telefonu engelleyebilir:
 programdaki "Bağlanamıyor musun?" -> "Güvenlik duvarı izni ver".
@@ -32,8 +33,9 @@ ENGLISH
 4. Tap the microphone button and allow access. A wireless headset connected to
    the phone can be picked from the list on the page.
 
-Android: tap "Download the app" on the page to install the app (BrokenMicrophone.apk
-comes from the computer), then "Open in app". It keeps working with the screen off.
+Android: tap "Get it on GitHub" on the page to install the app
+(https://herkanuzun.github.io/BrokenMicrophone/), then "Open in app".
+It keeps working with the screen off.
 5. In Discord, Zoom, OBS or your game, pick the virtual microphone
    ("CABLE Output" if VB-CABLE is installed).
 

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0c0e13">
+<title>Broken Microphone · Android</title>
+<link rel="icon" href="images/icon.png">
+<style>
+  :root {
+    --bg: #0c0e13; --text: #eaedf2; --sub: #9aa3b2; --accent: #2ec4b0; --accent-hi: #5fe0cd; --on-accent: #06201c;
+    --glass: rgba(255,255,255,.07); --glass-hi: rgba(255,255,255,.12); --line: rgba(255,255,255,.14); --warn: #f5a524;
+  }
+  * { box-sizing: border-box; }
+  /* koyu, buzlu cam kaydırma çubuğu */
+  html { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.14); border-radius: 10px; border: 3px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,.28); }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background-image:
+      radial-gradient(60vmax 60vmax at 5% 0%, rgba(46,196,176,.35), transparent 60%),
+      radial-gradient(55vmax 55vmax at 100% 40%, rgba(108,92,231,.28), transparent 60%),
+      radial-gradient(60vmax 60vmax at 15% 100%, rgba(47,128,237,.22), transparent 60%);
+    background-attachment: fixed;
+    display: grid; grid-template-columns: minmax(0, 520px); justify-content: center; align-content: center;
+    padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  }
+  main { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+  .card {
+    background: linear-gradient(135deg, var(--glass-hi), rgba(255,255,255,.03));
+    border: 1px solid var(--line); border-radius: 24px; padding: 20px;
+    -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%);
+    box-shadow: 0 10px 40px rgba(0,0,0,.25);
+  }
+  header { display: flex; align-items: center; gap: 14px; padding: 4px 4px 6px; }
+  header img { width: 56px; height: 56px; border-radius: 14px; }
+  h1 { margin: 0; font-size: 22px; line-height: 1.2; }
+  .sub { margin: 2px 0 0; color: var(--sub); font-size: 14px; }
+  h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #b7c0ce; }
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+    min-height: 54px; border-radius: 27px; text-decoration: none; font-weight: 650; font-size: 17px;
+    background: linear-gradient(135deg, var(--accent-hi), #1fa392); color: var(--on-accent);
+    box-shadow: 0 8px 24px rgba(46,196,176,.30);
+  }
+  .btn.ghost { background: var(--glass); color: var(--text); border: 1px solid var(--line); box-shadow: none; font-weight: 600; font-size: 15px; min-height: 46px; }
+  .row { display: flex; gap: 10px; margin-top: 10px; }
+  .row .btn { flex: 1; }
+  ol { margin: 0; padding-left: 22px; }
+  li { margin: 0 0 8px; }
+  li:last-child { margin: 0; }
+  .muted { color: var(--sub); font-size: 14px; margin: 10px 0 0; }
+  code, .fp {
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; color: #cfe9e4;
+    background: rgba(0,0,0,.25); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: block; word-break: break-all;
+  }
+  ul.check { list-style: none; margin: 0; padding: 0; }
+  ul.check li { padding-left: 26px; position: relative; }
+  ul.check li::before { content: ""; position: absolute; left: 4px; top: 8px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(46,196,176,.18); }
+  .note { border-left: 3px solid var(--warn); padding: 4px 0 4px 12px; color: #f3d9a8; font-size: 14px; }
+  a { color: var(--accent-hi); }
+  footer { text-align: center; color: #7d8696; font-size: 13px; padding: 4px 0 8px; }
+  .en { margin-top: 6px; }
+  details summary { cursor: pointer; color: var(--sub); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="images/icon.png" alt="">
+    <div>
+      <h1>Broken Microphone</h1>
+      <p class="sub">Android uygulaması · telefonun, bilgisayarın mikrofonu</p>
+    </div>
+  </header>
+
+  <section class="card">
+    <a class="btn" href="https://github.com/HErkanuzun/BrokenMicrophone/releases/latest/download/BrokenMicrophone.apk" rel="noopener noreferrer">
+      APK'yı indir
+    </a>
+    <p class="muted">Son sürüm, doğrudan GitHub'dan (~90 KB). Reklam yok, hesap yok, internete veri göndermez. Android 7.0 ve üstü.</p>
+    <div class="row">
+      <a class="btn ghost" href="https://github.com/HErkanuzun/BrokenMicrophone/releases/latest" rel="noopener noreferrer">Sürüm notları</a>
+      <a class="btn ghost" href="https://github.com/HErkanuzun/BrokenMicrophone" rel="noopener noreferrer">Kaynak kod</a>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Kurulum</h2>
+    <ol>
+      <li>Yukarıdaki <b>APK'yı indir</b>'e dokun ve dosyayı aç.</li>
+      <li>Android "bilinmeyen uygulamalar" izni isterse <b>sadece tarayıcına</b> ver. Kurduktan sonra bu izni kapatabilirsin.</li>
+      <li>Bilgisayarda Broken Microphone'u aç, penceredeki QR kodu telefonla okut ve sayfada <b>Uygulamada aç</b>'a dokun.</li>
+      <li>Uygulama adresi gösterip sorar; doğruysa <b>Bağlan</b>.</li>
+    </ol>
+    <p class="note">iPhone ve iPad için uygulama gerekmez: bilgisayardaki QR kodu okutunca açılan sayfa yeter.</p>
+  </section>
+
+  <section class="card">
+    <h2>Güvenlik</h2>
+    <ul class="check">
+      <li>Sadece <b>aynı ağdaki</b> bilgisayara bağlanır; internetteki bir adres için bağlantı açılmaz ya da açıkça onay ister.</li>
+      <li>Ses TLS ile şifreli gider. Bilgisayarın sertifikası ilk bağlantıda hatırlanır; değişirse uygulama bağlanmaz ve sorar.</li>
+      <li>Bağlantı anahtarı telefonda Android Keystore ile şifreli saklanır; yedeklere ve cihaz aktarımına girmez.</li>
+      <li>Bir web sitesi uygulamayı açsa bile sen onaylamadan mikrofon açılmaz. Üstte başka bir pencere varken dokunuşlar yok sayılır.</li>
+      <li>İzinler: mikrofon, bildirim, ağ, Bluetooth (kulaklık mikrofonu için). Konum, kişiler, dosyalar yok.</li>
+    </ul>
+    <p class="muted">İndirdiğin dosyayı doğrulamak için: sürümdeki <a href="https://github.com/HErkanuzun/BrokenMicrophone/releases/latest/download/SHA256SUMS.txt" rel="noopener noreferrer">SHA256SUMS.txt</a> dosyasındaki özetle karşılaştır. Uygulamanın imza sertifikası (SHA-256):</p>
+    <span class="fp">B7:4F:9A:B8:C1:88:71:79:DF:E2:0B:B0:CF:3B:9E:A4:AA:20:D8:F5:BB:90:39:44:12:E6:BD:DE:87:19:B3:27</span>
+  </section>
+
+  <section class="card en" lang="en">
+    <details>
+      <summary>English</summary>
+      <p>Tap <b>APK'yı indir</b> (Download the APK) above; it comes straight from GitHub. If Android asks to allow unknown apps, allow it only for your browser and turn it off afterwards. Then open Broken Microphone on your computer, scan its QR code, tap <b>Open in app</b> and confirm the address in the app.</p>
+      <p>The app only connects to computers on your own network (anything else is refused or needs your explicit confirmation), encrypts audio with TLS and pins the computer's certificate, stores the connection key encrypted with Android Keystore, keeps it out of backups, and ignores touches while another window covers it. iPhone and iPad don't need an app: the page that opens from the QR code is enough.</p>
+      <p>Signing certificate SHA-256: see above. Checksums: SHA256SUMS.txt in each release.</p>
+    </details>
+  </section>
+
+  <footer>Broken ailesinden · MIT lisansı · <a href="https://github.com/HErkanuzun" rel="noopener noreferrer">HErkanuzun</a></footer>
+</main>
+</body>
+</html>

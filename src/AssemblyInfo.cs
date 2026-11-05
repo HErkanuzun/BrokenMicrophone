@@ -21,5 +21,8 @@ namespace BrokenMicrophone
         public const string Name = "Broken Microphone";
         public const string Version = "1.1";
         public const string Repo = "https://github.com/HErkanuzun/BrokenMicrophone";
+        // Android uygulamasının indirme sayfası (GitHub Pages) ve en son APK
+        public const string AndroidPage = "https://herkanuzun.github.io/BrokenMicrophone/";
+        public const string AndroidApk = Repo + "/releases/latest/download/BrokenMicrophone.apk";
     }
 }

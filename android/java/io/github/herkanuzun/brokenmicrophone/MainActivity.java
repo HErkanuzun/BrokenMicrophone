@@ -2,6 +2,7 @@ package io.github.herkanuzun.brokenmicrophone;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
@@ -23,6 +24,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
 import android.view.WindowInsets;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -59,6 +61,7 @@ public class MainActivity extends Activity implements Hub.Listener {
     private boolean fillingSpinner;
     private boolean pendingStart;
     private boolean resumed;
+    private String remoteOk = "";      // ev ağı dışındaki bu adres için kullanıcı onay verdi
 
     private final Runnable tick = new Runnable() {
         @Override
@@ -87,7 +90,10 @@ public class MainActivity extends Activity implements Hub.Listener {
         w.setNavigationBarColor(Color.TRANSPARENT);
         w.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                 | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION);
-        setContentView(build());
+        View root = build();
+        guard(root);
+        setContentView(root);
+        if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false);   // anahtar son uygulamalar ekranında görünmesin
         fillMics();
         handle(getIntent());
     }
@@ -292,10 +298,10 @@ public class MainActivity extends Activity implements Hub.Listener {
                 "Open Broken Microphone on the computer. Scan the QR code with the phone's camera and tap \"Open in app\" on the page. Or press \"Copy\" in the window and paste it here."));
         pc.addView(how);
         addrField = field(L.t("Adres (192.168.1.5:47820)", "Address (192.168.1.5:47820)"), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        keyField = field(L.t("Anahtar", "Key"), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+        keyField = field(L.t("Anahtar", "Key"), InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         String host = prefs.getString("host", "");
         if (host.length() > 0) addrField.setText(host + ":" + prefs.getInt("port", DEFAULT_PORT));
-        keyField.setText(prefs.getString("key", ""));
+        keyField.setText(loadKey());
         LinearLayout.LayoutParams fl = new LinearLayout.LayoutParams(-1, -2);
         fl.topMargin = px(12);
         pc.addView(addrField, fl);
@@ -470,16 +476,84 @@ public class MainActivity extends Activity implements Hub.Listener {
         return new String[] { m.group(1), port, k.find() ? k.group(1) : null };
     }
 
+    /**
+     * Sayfadaki "Uygulamada aç" bağlantısı (brokenmic://adres:port/?k=anahtar). Herhangi bir web sitesi de böyle bir
+     * bağlantı açabileceği için: sadece ev ağındaki adresler kabul edilir ve bağlanmadan önce kullanıcıya sorulur.
+     */
     private void handle(Intent intent) {
         Uri u = intent == null ? null : intent.getData();
         if (u == null || !"brokenmic".equals(u.getScheme())) return;
-        String host = u.getHost(), key = u.getQueryParameter("k");
-        int port = u.getPort() > 0 ? u.getPort() : DEFAULT_PORT;
-        if (host == null || key == null) return;
-        addrField.setText(host + ":" + port);
-        keyField.setText(key);
         intent.setData(null);
-        startMic();
+        final String host = u.getHost(), key = u.getQueryParameter("k");
+        final int port = u.getPort() > 0 ? u.getPort() : DEFAULT_PORT;
+        if (host == null || key == null || !validKey(key) || port > 65535) return;
+        if (!isLocal(host)) {
+            alert(L.t("Bağlantı açılmadı", "Link not opened"),
+                  L.t("Bu bağlantı ev ağındaki bir bilgisayarı göstermiyor (" + host + "). Güvenlik için uygulama sadece aynı ağdaki bilgisayarlara bağlanır.",
+                      "This link doesn't point to a computer on your home network (" + host + "). For safety the app only connects to computers on the same network."),
+                  null, null);
+            return;
+        }
+        alert(L.t("Bu bilgisayara bağlanılsın mı?", "Connect to this computer?"),
+              host + ":" + port + "\n\n" + L.t("Mikrofonunun sesi bu bilgisayara gidecek. Bu bağlantıyı bilgisayardaki Broken Microphone sayfasından açtıysan Bağlan'a dokun.",
+                                                 "Your microphone's audio will go to this computer. Tap Connect only if you opened this from the Broken Microphone page on your computer."),
+              L.t("Bağlan", "Connect"), () -> {
+                  addrField.setText(host + ":" + port);
+                  keyField.setText(key);
+                  startMic();
+              });
+    }
+
+    private void alert(String title, String msg, String okText, Runnable ok) {
+        AlertDialog.Builder b = new AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+                .setTitle(title).setMessage(msg);
+        if (ok != null) {
+            b.setPositiveButton(okText, (d, w) -> ok.run());
+            b.setNegativeButton(L.t("Vazgeç", "Cancel"), null);
+        } else {
+            b.setPositiveButton(L.t("Tamam", "OK"), null);
+        }
+        AlertDialog d = b.show();
+        View pos = d.getButton(AlertDialog.BUTTON_POSITIVE);
+        if (pos != null) pos.setFilterTouchesWhenObscured(true);
+    }
+
+    static boolean validKey(String k) {
+        return k != null && k.matches("[A-Za-z0-9_\\-]{4,64}");
+    }
+
+    /** Ev ağı adresi mi: 10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10 (Tailscale vb.), IPv6 yerel, .local/.lan/.home.arpa */
+    static boolean isLocal(String host) {
+        if (host == null) return false;
+        String h = host.toLowerCase(java.util.Locale.ROOT);
+        if (h.endsWith(".local") || h.endsWith(".lan") || h.endsWith(".home.arpa")) return true;
+        if (h.startsWith("[")) h = h.substring(1, h.length() - 1);
+        if (h.contains(":")) return h.startsWith("fe80:") || h.startsWith("fc") || h.startsWith("fd");
+        String[] p = h.split("\\.");
+        if (p.length != 4) return false;
+        int[] n = new int[4];
+        try {
+            for (int i = 0; i < 4; i++) { n[i] = Integer.parseInt(p[i]); if (n[i] < 0 || n[i] > 255) return false; }
+        } catch (NumberFormatException e) { return false; }
+        return n[0] == 10
+                || (n[0] == 172 && n[1] >= 16 && n[1] <= 31)
+                || (n[0] == 192 && n[1] == 168)
+                || (n[0] == 169 && n[1] == 254)
+                || (n[0] == 100 && n[1] >= 64 && n[1] <= 127);
+    }
+
+    /** Dokunma kaçırma koruması: üstte başka bir pencere varken dokunuşlar yok sayılır. */
+    private static void guard(View v) {
+        v.setFilterTouchesWhenObscured(true);
+        if (v instanceof ViewGroup)
+            for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) guard(((ViewGroup) v).getChildAt(i));
+    }
+
+    private String loadKey() {
+        String s = prefs.getString("key", "");
+        if (s.startsWith("v1:")) return Secret.open(s);
+        if (!s.isEmpty()) prefs.edit().putString("key", Secret.seal(s)).apply();   // eski düz kayıt: şifrele
+        return s;
     }
 
     private void pasteLink() {
@@ -506,9 +580,22 @@ public class MainActivity extends Activity implements Hub.Listener {
             Toast.makeText(this, L.t("Önce adresi ve anahtarı gir (ya da QR kodu okut)", "Enter the address and key first (or scan the QR code)"), Toast.LENGTH_LONG).show();
             return;
         }
+        if (!validKey(key)) {
+            Toast.makeText(this, L.t("Anahtar geçersiz", "Invalid key"), Toast.LENGTH_LONG).show();
+            return;
+        }
         int port;
         try { port = Integer.parseInt(t[1]); } catch (NumberFormatException e) { port = DEFAULT_PORT; }
-        prefs.edit().putString("host", t[0]).putInt("port", port).putString("key", key).apply();
+        if (port <= 0 || port > 65535) port = DEFAULT_PORT;
+        if (!isLocal(t[0]) && !t[0].equals(remoteOk)) {
+            final String host = t[0];
+            alert(L.t("Ev ağı dışında bir adres", "Address outside your home network"),
+                  host + "\n\n" + L.t("Bu adres ev ağında görünmüyor. Mikrofonunun sesi bu adrese gidecek. Emin misin?",
+                                       "This address doesn't look like your home network. Your microphone's audio will go there. Are you sure?"),
+                  L.t("Yine de bağlan", "Connect anyway"), () -> { remoteOk = host; startMic(ask); });
+            return;
+        }
+        prefs.edit().putString("host", t[0]).putInt("port", port).putString("key", Secret.seal(key)).apply();
         keyField.setText(key);
 
         List<String> need = new ArrayList<>();

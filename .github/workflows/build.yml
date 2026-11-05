@@ -120,5 +120,5 @@ jobs:
           files: |
             dist/BrokenMicrophone-*-Setup.exe
             dist/BrokenMicrophone-*-Portable.zip
-            dist/BrokenMicrophone-*.apk
+            dist/BrokenMicrophone.apk
             dist/SHA256SUMS.txt
