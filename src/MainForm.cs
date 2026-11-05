@@ -322,8 +322,8 @@ namespace BrokenMicrophone
             });
             btnHelp = Btn(L.T("Bağlanamıyor musun?", "Can't connect?"), BtnKind.Ghost, delegate { ShowConnectHelp(); });
             lblSteps = Text2(L.T(
-                "1. Telefon bilgisayarla aynı Wi-Fi ağında olsun.\n2. Telefonun kamerasıyla QR kodu okut.\n3. \"Bağlantı gizli değil\" uyarısında Ayrıntılar → Siteyi ziyaret et (sadece ilk seferde).\n4. Mikrofon düğmesine bas ve izin ver.\nAndroid: sayfadaki \"Uygulamayı indir\" ile uygulamayı kur; ekran kapalıyken de çalışır.",
-                "1. Put the phone on the same Wi-Fi as the computer.\n2. Scan the QR code with the phone's camera.\n3. At the \"connection is not private\" warning choose Details → Visit website (first time only).\n4. Tap the microphone button and allow access.\nAndroid: install the app with \"Download the app\" on the page; it keeps working with the screen off."),
+                "1. Telefon bilgisayarla aynı Wi-Fi ağında olsun.\n2. Telefonun kamerasıyla QR kodu okut.\n3. \"Bağlantı gizli değil\" uyarısında Ayrıntılar → Siteyi ziyaret et (sadece ilk seferde).\n4. Mikrofon düğmesine bas ve izin ver.\nAndroid: sayfadan uygulamayı da indirebilirsin.",
+                "1. Put the phone on the same Wi-Fi as the computer.\n2. Scan the QR code with the phone's camera.\n3. At the \"connection is not private\" warning choose Details → Visit website (first time only).\n4. Tap the microphone button and allow access.\nAndroid: you can also get the app from the page."),
                 Theme.Sub, 9f, FontStyle.Regular);
 
             // sağ: ses
