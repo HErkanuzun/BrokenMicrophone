@@ -46,6 +46,20 @@ $env:JAVA_HOME = $jdk
 $env:PATH = "$jdk\bin;$env:PATH"
 Write-Host "SDK $($bt.Name) / $($plat.Name), JDK $jdk, version $ver ($code)"
 
+# ---------------------------------------------------------------- QR okuma kütüphanesi (ZXing core, Apache 2.0)
+# Maven Central'dan iner; SHA-256 sabit, değişmiş dosya kullanılmaz.
+$zxVer = '3.5.3'
+$zxSha = '8D8064C1636FDAEF7189DD9055C7D59950A8940A12F2293956446EC3C109FD82'
+$deps = Join-Path $root 'obj\deps'
+$zxing = Join-Path $deps "zxing-core-$zxVer.jar"
+New-Item -ItemType Directory -Force $deps | Out-Null
+if (-not (Test-Path $zxing) -or (Get-FileHash $zxing -Algorithm SHA256).Hash -ne $zxSha) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Invoke-WebRequest -UseBasicParsing "https://repo1.maven.org/maven2/com/google/zxing/core/$zxVer/core-$zxVer.jar" -OutFile "$zxing.part"
+    if ((Get-FileHash "$zxing.part" -Algorithm SHA256).Hash -ne $zxSha) { Remove-Item "$zxing.part"; throw 'ZXing dosyasının SHA-256 özeti tutmuyor.' }
+    Move-Item -Force "$zxing.part" $zxing
+}
+
 # ---------------------------------------------------------------- derle
 $obj = Join-Path $root 'obj\android'
 if (Test-Path $obj) { Get-ChildItem $obj -Exclude 'debug.keystore' | Remove-Item -Recurse -Force }
@@ -61,10 +75,12 @@ $pkgDir = "$obj\gen\io\github\herkanuzun\brokenmicrophone"
     "package io.github.herkanuzun.brokenmicrophone;`nfinal class BuildInfo { static final String VERSION = `"$ver`"; }`n")
 
 $sources = @(Get-ChildItem "$here\java", "$obj\gen" -Recurse -Filter *.java | ForEach-Object FullName)
-Run "$jdk\bin\javac.exe" -encoding UTF-8 -source 8 -target 8 -classpath $jar '-Xlint:-options' `
+Run "$jdk\bin\javac.exe" -encoding UTF-8 -source 8 -target 8 -classpath "$jar;$zxing" '-Xlint:-options' `
     -d "$obj\classes" @sources
 $classes = @(Get-ChildItem "$obj\classes" -Recurse -Filter *.class | ForEach-Object FullName)
-Run "$B\d8.bat" --release --min-api 24 --lib $jar --output $obj @classes
+# R8: dex'e çevirir ve kullanılmayan kodu atar (ZXing'in QR dışındaki kısımları)
+Run "$jdk\bin\java.exe" -cp "$B\lib\d8.jar" com.android.tools.r8.R8 --release --min-api 24 --lib $jar `
+    --pg-conf "$here\shrink.pro" --output $obj @classes $zxing
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::Open("$obj\base.apk", 'Update')

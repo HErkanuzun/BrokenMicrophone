@@ -68,6 +68,7 @@ public class MicService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        L.init(this);
         am = (AudioManager) getSystemService(AUDIO_SERVICE);
     }
 

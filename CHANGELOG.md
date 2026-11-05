@@ -2,6 +2,17 @@
 
 All notable changes to Broken Microphone. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2] - 2026-11-06
+
+### Added
+- Android app: scans the computer's QR code itself (camera, decoded on the phone with ZXing; nothing leaves the phone).
+- Android app: language choice on first launch, and a Settings screen (language, computer, microphone, updates, about).
+- Android app: update check. Reads the latest version number from GitHub at most twice a day (can be turned off) and offers the new APK from GitHub Releases.
+- Phone page on Android: asks once whether to open the app, download the APK or continue in the browser; "don't ask again" is remembered on that phone.
+
+### Changed
+- Android app: much simpler main screen: one microphone button, status, and "Scan QR code". Manual address entry moved to Settings.
+
 ## [1.1] - 2026-11-06
 
 ### Added

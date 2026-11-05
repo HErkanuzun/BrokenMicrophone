@@ -94,6 +94,14 @@
   .switch input:checked::after { left: 21px; background: #fff; }
   .note { color: var(--sub); font-size: 13px; margin: 0; }
   .hidden { display: none !important; }
+  .sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; justify-content: center; z-index: 10; padding: 16px; padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  .sheet { width: 100%; max-width: 440px; background: #161a21; border: 1px solid var(--border); border-radius: 22px; padding: 22px 18px 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 -10px 40px rgba(0,0,0,.4); }
+  .sheet h2 { margin: 0; font-size: 19px; }
+  .sheet p { margin: 0; color: var(--sub); font-size: 14px; }
+  .sheet .btn { flex: none; width: 100%; }
+  .sheet .plain { background: none; border: 0; color: var(--sub); font: inherit; font-size: 15px; min-height: 44px; cursor: pointer; }
+  .sheet input { accent-color: var(--accent); width: 18px; height: 18px; }
+  .sheet label { display: flex; align-items: center; gap: 8px; color: var(--sub); font-size: 13px; justify-content: center; }
 </style>
 </head>
 <body>
@@ -135,6 +143,17 @@
     </div>
   </section>
 
+  <div class="sheet-bg hidden" id="appSheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet">
+      <h2 id="sheetTitle" data-t="sheetTitle"></h2>
+      <p data-t="sheetText"></p>
+      <a class="btn primary" id="sheetOpen" data-t="openApp"></a>
+      <a class="btn" id="sheetGet" data-t="sheetGet"></a>
+      <button class="plain" id="sheetWeb" data-t="sheetWeb"></button>
+      <label><input type="checkbox" id="sheetRemember"> <span data-t="sheetRemember"></span></label>
+    </div>
+  </div>
+
   <section class="card">
     <h2 data-t="settings"></h2>
     <label class="field"><span data-t="micLabel"></span>
@@ -173,7 +192,13 @@
     androidTitle: ['Android uygulaması', 'Android app'],
     androidNote: ['Uygulama ekran kapalıyken de çalışır. Yüklüyse "Uygulamada aç"a dokun; değilse GitHub\'dan indir ve kur.',
                   'The app keeps working with the screen off. If it\'s installed, tap "Open in app"; if not, download it from GitHub and install it.'],
-    openApp: ['Uygulamada aç', 'Open in app'], getApp: ['GitHub\'dan indir', 'Get it on GitHub']
+    openApp: ['Uygulamada aç', 'Open in app'], getApp: ['GitHub\'dan indir', 'Get it on GitHub'],
+    sheetTitle: ['Android uygulamasıyla aç?', 'Open in the Android app?'],
+    sheetText: ['Uygulama ekran kapalıyken de çalışır, bilgisayarı hatırlar ve QR kodu kendisi okur. Yüklü değilse GitHub\'dan indirebilirsin (~130 KB).',
+                'The app keeps working with the screen off, remembers the computer and scans the QR code itself. If it isn\'t installed, get it from GitHub (~130 KB).'],
+    sheetGet: ['APK\'yı indir', 'Download the APK'], sheetWeb: ['Tarayıcıda devam et', 'Continue in the browser'],
+    sheetRemember: ['Bu telefonda bir daha sorma', 'Don\'t ask again on this phone'],
+    apkHint: ['İndirme bitince dosyaya dokun. Android "zararlı olabilir" derse "Yine de indir"e bas.', 'When the download finishes, tap the file. If Android warns, choose "Download anyway".']
   };
   function t(k) { return (T[k] || ['', ''])[tr ? 0 : 1]; }
   document.documentElement.lang = tr ? 'tr' : 'en';
@@ -200,17 +225,32 @@
 
   // Android: yerel uygulamaya geçiş (ekran kapalıyken de çalışır). APK GitHub'dan iner (gerçek sertifika, SHA-256 özeti);
   // bu bilgisayar APK dağıtmaz. Uygulama bağlanmadan önce adresi kullanıcıya onaylatır.
+  // İlk açılışta seçim sorulur: uygulamada aç / APK'yı indir / tarayıcıda devam. "Bir daha sorma" bu telefonda hatırlanır.
   if (/android/i.test(navigator.userAgent) && key) {
     var page = 'https://herkanuzun.github.io/BrokenMicrophone/';
-    var openApp = $('openApp'), getApp = $('getApp');
-    getApp.href = page;
-    getApp.rel = 'noopener noreferrer';
-    getApp.classList.remove('hidden');
-    $('android').classList.remove('hidden');
-    openApp.href = 'intent://' + location.host + '/?k=' + encodeURIComponent(key) +
+    var apk = 'https://github.com/HErkanuzun/BrokenMicrophone/releases/latest/download/BrokenMicrophone.apk';
+    var appUrl = 'intent://' + location.host + '/?k=' + encodeURIComponent(key) +
       '#Intent;scheme=brokenmic;package=io.github.herkanuzun.brokenmicrophone;S.browser_fallback_url=' +
       encodeURIComponent(page) + ';end';
+    var openApp = $('openApp'), getApp = $('getApp'), sheet = $('appSheet');
+    getApp.href = page;
+    getApp.rel = 'noopener noreferrer';
+    $('android').classList.remove('hidden');
+    openApp.href = appUrl;
     openApp.addEventListener('click', function () { if (running) stop(); });
+
+    var remember = function (choice) { if ($('sheetRemember').checked) store('appChoice', choice); };
+    var closeSheet = function () { sheet.classList.add('hidden'); };
+    $('sheetOpen').href = appUrl;
+    $('sheetOpen').addEventListener('click', function () { remember('app'); closeSheet(); });
+    $('sheetGet').href = apk;
+    $('sheetGet').rel = 'noopener noreferrer';
+    $('sheetGet').addEventListener('click', function () { closeSheet(); setStatus('', t('apkHint')); });
+    $('sheetWeb').addEventListener('click', function () { remember('web'); closeSheet(); });
+    sheet.addEventListener('click', function (e) { if (e.target === sheet) closeSheet(); });
+    var choice = store('appChoice');
+    if (choice !== 'web') sheet.classList.remove('hidden');
+    if (choice === 'app') $('sheetRemember').checked = true;
   }
 
   function setStatus(kind, text) { $('status').className = 'status ' + kind; $('statusText').textContent = text; }

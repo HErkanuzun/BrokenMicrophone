@@ -41,7 +41,9 @@ iPhone'da sayfa yeter. Android'de istersen küçük bir uygulama da var (~90 KB,
 
 - **Ekran kapalıyken de çalışır.** Telefonu cebine koyabilirsin; bildirimden susturur ya da durdurursun.
 - **GitHub'dan iner:** [https://herkanuzun.github.io/BrokenMicrophone/](https://herkanuzun.github.io/BrokenMicrophone/) sayfasından (penceredeki **Android uygulaması** düğmesi bu sayfanın QR kodunu gösterir; telefon sayfasındaki **GitHub'dan indir** de oraya gider). APK her sürümde `BrokenMicrophone.apk` olarak [Releases](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest) sayfasında; özeti `SHA256SUMS.txt` içinde.
-- Sonra telefon sayfasındaki **Uygulamada aç** adresi ve anahtarı uygulamaya verir; uygulama bağlanmadan önce adresi gösterip sorar.
+- Uygulamayı aç, dilini seç, **QR kodu okut**'a dokun ve bilgisayardaki QR kodu göster: uygulama bağlanır. Ayarlar'da dil, mikrofon, elle adres girme ve güncellemeler var.
+- Güncellemeleri kendisi denetler (GitHub'daki son sürüm numarası, kapatılabilir) ve yenisini GitHub'dan indirir.
+- Telefon kamerasıyla okutulan QR kod tarayıcıda açılırsa sayfa bir kez sorar: uygulamada aç, APK'yı indir ya da tarayıcıda devam et.
 - Bluetooth kulaklık mikrofonu, gürültü azaltma, yankı engelleme, otomatik ses seviyesi.
 - Bilgisayarın sertifikasını ilk bağlantıda hatırlar; sonra başka bir cihaz araya girerse bağlanmaz ve uyarır.
 - Sadece ev ağındaki adreslere bağlanır (başkası için açık onay ister). Bir web sitesi uygulamayı açsa bile sen onaylamadan mikrofon açılmaz. Bağlantı anahtarı Android Keystore ile şifreli saklanır ve yedeklere girmez. Üstte başka bir pencere varken dokunuşlar yok sayılır.
