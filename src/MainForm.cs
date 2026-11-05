@@ -28,7 +28,7 @@ namespace BrokenMicrophone
         PictureBox logo;
         Label lblTitle, lblSub, secPhone, secOut, secDevices, lblSteps, lblOutHint, lblFoot;
         Seg segLang;
-        FlatButton btnAbout, btnCopy, btnHelp, btnDriver;
+        FlatButton btnAbout, btnCopy, btnHelp, btnDriver, btnAndroid;
         StatusBox info;
         QrView qr;
         DarkCombo cmbAddress, cmbOutput;
@@ -321,9 +321,10 @@ namespace BrokenMicrophone
                 try { Clipboard.SetText(Url); btnCopy.Text = L.T("Kopyalandı", "Copied"); } catch { }
             });
             btnHelp = Btn(L.T("Bağlanamıyor musun?", "Can't connect?"), BtnKind.Ghost, delegate { ShowConnectHelp(); });
+            btnAndroid = Btn(L.T("Android uygulaması", "Android app"), BtnKind.Secondary, delegate { ShowAndroid(); });
             lblSteps = Text2(L.T(
-                "1. Telefon bilgisayarla aynı Wi-Fi ağında olsun.\n2. Telefonun kamerasıyla QR kodu okut.\n3. \"Bağlantı gizli değil\" uyarısında Ayrıntılar → Siteyi ziyaret et (sadece ilk seferde).\n4. Mikrofon düğmesine bas ve izin ver.\nAndroid: sayfadan uygulamayı da indirebilirsin.",
-                "1. Put the phone on the same Wi-Fi as the computer.\n2. Scan the QR code with the phone's camera.\n3. At the \"connection is not private\" warning choose Details → Visit website (first time only).\n4. Tap the microphone button and allow access.\nAndroid: you can also get the app from the page."),
+                "1. Telefon bilgisayarla aynı Wi-Fi ağında olsun.\n2. Telefonun kamerasıyla QR kodu okut.\n3. \"Bağlantı gizli değil\" uyarısında Ayrıntılar → Siteyi ziyaret et (sadece ilk seferde).\n4. Mikrofon düğmesine bas ve izin ver.",
+                "1. Put the phone on the same Wi-Fi as the computer.\n2. Scan the QR code with the phone's camera.\n3. At the \"connection is not private\" warning choose Details → Visit website (first time only).\n4. Tap the microphone button and allow access."),
                 Theme.Sub, 9f, FontStyle.Regular);
 
             // sağ: ses
@@ -450,7 +451,9 @@ namespace BrokenMicrophone
             if (cmbAddress.Visible) { cmbAddress.SetBounds(qx, y, qw, P(30)); y = cmbAddress.Bottom + P(10); }
             btnCopy.SetBounds(qx, y, (qw - P(8)) / 2, P(36));
             btnHelp.SetBounds(qx + (qw + P(8)) / 2, y, (qw - P(8)) / 2, P(36));
-            y = btnCopy.Bottom + P(12);
+            y = btnCopy.Bottom + P(8);
+            btnAndroid.SetBounds(qx, y, qw, P(36));
+            y = btnAndroid.Bottom + P(12);
             lblSteps.MaximumSize = new Size(qw, 0);
             lblSteps.Location = new Point(qx, y);
             int leftBottom = y + lblSteps.Height;
@@ -636,6 +639,14 @@ namespace BrokenMicrophone
         }
 
         // ------------------------------------------------------------------ yardım
+        void ShowAndroid()
+        {
+            string url = "";
+            if (server != null && addresses.Count > 0)
+                url = "https://" + SelectedAddress.Ip + ":" + server.Port + "/app.apk?k=" + cfg.Key;
+            using (var d = new AndroidDialog(url, Server.Apk())) d.ShowDialog(this);
+        }
+
         void ShowConnectHelp()
         {
             using (var d = new ConnectHelpDialog(cfg.Port)) d.ShowDialog(this);

@@ -6,6 +6,7 @@ All notable changes to Broken Microphone. The format follows [Keep a Changelog](
 
 ### Added
 - Android app (APK, ~90 KB): keeps sending audio with the screen off, with a notification to mute or stop. Bluetooth headset microphones, noise suppression, echo cancellation and automatic gain. It remembers the computer's certificate on first connection and refuses to connect if it changes.
+- The APK is built into Broken Microphone. The new **Android app** button in the window shows a QR code that downloads it to the phone, and can save it to the computer.
 - The computer hands the APK to the phone: on Android the page shows **Download the app** and **Open in app** (passes the address and key to the app). No internet needed.
 - The APK is also attached to each release as `BrokenMicrophone-<version>.apk`.
 

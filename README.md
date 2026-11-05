@@ -38,7 +38,7 @@ Telefonun, tabletin ya da onlara bağlı kablosuz kulaklık, Wi-Fi üzerinden bi
 iPhone'da sayfa yeter. Android'de istersen küçük bir uygulama da var (~90 KB, reklamsız, izin olarak sadece mikrofon ve bildirim ister):
 
 - **Ekran kapalıyken de çalışır.** Telefonu cebine koyabilirsin; bildirimden susturur ya da durdurursun.
-- **Kurulum internet istemez:** QR kodu okut, açılan sayfada **Uygulamayı indir**'e dokun. APK bilgisayardan gelir. Sonra sayfadaki **Uygulamada aç** adresi ve anahtarı uygulamaya verir.
+- **Kurulum internet istemez:** APK, Broken Microphone'un içinde gelir. Penceredeki **Android uygulaması** düğmesi APK'yı indiren bir QR kod gösterir (ya da APK'yı kaydeder); telefon sayfasındaki **Uygulamayı indir** de aynı dosyayı verir. Sonra sayfadaki **Uygulamada aç** adresi ve anahtarı uygulamaya verir.
 - APK ayrıca her sürümde `BrokenMicrophone-<sürüm>.apk` olarak [Releases](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest) sayfasında.
 - Bluetooth kulaklık mikrofonu, gürültü azaltma, yankı engelleme, otomatik ses seviyesi.
 - Bilgisayarın sertifikasını ilk bağlantıda hatırlar; sonra başka bir cihaz araya girerse bağlanmaz ve uyarır.
@@ -117,7 +117,7 @@ Windows'ta bozuk ya da sorunlu bir şeyi bulup onunla yaşamanı sağlayan küç
 4. Tap the big microphone button and allow access.
 5. In Discord, Zoom, Teams, OBS or your game, pick the **virtual microphone**.
 
-**Android app (optional):** on Android there is also a small app (~90 KB) that keeps working with the screen off. Scan the QR code, tap **Download the app** on the page (the APK comes from your computer, no internet needed), install it, then tap **Open in app**. The APK is also attached to every [release](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest). It remembers the computer's certificate on first connection and refuses to connect if it changes. Android 7.0 or newer.
+**Android app (optional):** on Android there is also a small app (~90 KB) that keeps working with the screen off. Scan the QR code, press **Android app** in the window and scan its QR code, or tap **Download the app** on the page (the APK is built into Broken Microphone, no internet needed), install it, then tap **Open in app**. The APK is also attached to every [release](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest). It remembers the computer's certificate on first connection and refuses to connect if it changes. Android 7.0 or newer.
 
 The page works on iPhone, iPad and Android. A wireless headset connected to the phone shows up in its *Microphone* list. Noise suppression, echo cancellation and automatic gain can be toggled; mute shows on the computer too. Several phones can connect; the one that talks (or that you click) is used, and their audio is never mixed.
 

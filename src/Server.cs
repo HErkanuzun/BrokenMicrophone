@@ -196,15 +196,15 @@ namespace BrokenMicrophone
                     // Android uygulaması: kurulumla birlikte gelen APK telefona bilgisayardan iner
                     if (route == "/app.apk")
                     {
-                        string apk = ApkPath();
-                        if (Query(query, "k") != key || apk == null)
+                        byte[] apkData = Apk();
+                        if (Query(query, "k") != key || apkData == null)
                         {
                             Respond(s, Query(query, "k") != key ? "403 Forbidden" : "404 Not Found", "text/plain", new byte[0], "", keep);
                             if (!keep) return;
                             continue;
                         }
-                        byte[] apkBytes = req.Method == "HEAD" ? null : File.ReadAllBytes(apk);
-                        long size = new FileInfo(apk).Length;
+                        byte[] apkBytes = req.Method == "HEAD" ? null : apkData;
+                        long size = apkData.Length;
                         var apkHead = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/vnd.android.package-archive\r\n" +
                             "Content-Disposition: attachment; filename=\"BrokenMicrophone.apk\"\r\nContent-Length: " + size +
                             "\r\nCache-Control: no-cache\r\nConnection: " + (keep ? "keep-alive" : "close") + "\r\n\r\n");
@@ -367,13 +367,15 @@ namespace BrokenMicrophone
             }
         }
 
-        /// <summary>Programın yanındaki BrokenMicrophone.apk (kurulum ve taşınabilir sürümle gelir).</summary>
-        public static string ApkPath()
+        /// <summary>Android uygulaması: exe'nin içine gömülü APK (yoksa programın yanındaki BrokenMicrophone.apk).</summary>
+        public static byte[] Apk()
         {
+            byte[] b = Resource("app.apk");
+            if (b != null) return b;
             try
             {
                 string p = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BrokenMicrophone.apk");
-                return File.Exists(p) ? p : null;
+                return File.Exists(p) ? File.ReadAllBytes(p) : null;
             }
             catch { return null; }
         }

@@ -2,7 +2,7 @@
 # build.bat'ten sonra çalışır; dist\ klasörüne şunları üretir:
 #   BrokenMicrophone-<sürüm>-Setup.exe     kurulum paketi (önerilen; varsa günceller, yoksa kurar)
 #   BrokenMicrophone-<sürüm>-Portable.zip  kurulumsuz kullanım: program, okuma notu, lisans
-#   BrokenMicrophone-<sürüm>.apk           Android uygulaması (varsa: android\build.ps1 bin\ içine üretir)
+#   BrokenMicrophone-<sürüm>.apk           Android uygulaması (varsa; ayrıca exe'nin içine gömülüdür)
 #   SHA256SUMS.txt                          dosyaların SHA-256 özetleri (indirilen dosyayı doğrulamak için)
 # Kullanım: powershell -ExecutionPolicy Bypass -File scripts\package.ps1 -Version 1.0 [-Iscc <ISCC.exe yolu>]
 param(
@@ -25,7 +25,6 @@ New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item (Join-Path $bin 'BrokenMicrophone.exe') $stage
 $apk = Join-Path $bin 'BrokenMicrophone.apk'
 if (Test-Path $apk) {
-    Copy-Item $apk $stage      # bilgisayar telefona bu dosyayı verir
     Copy-Item $apk (Join-Path $dist "BrokenMicrophone-$Version.apk")
 }
 Copy-Item (Join-Path $root 'LICENSE') (Join-Path $stage 'LICENSE.txt')

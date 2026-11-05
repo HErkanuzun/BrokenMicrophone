@@ -310,6 +310,92 @@ namespace BrokenMicrophone
         }
     }
 
+    // ------------------------------------------------------------------ Android uygulaması
+    class AndroidDialog : DarkDialog
+    {
+        readonly byte[] apk;
+
+        public AndroidDialog(string url, byte[] apk) : base(600)
+        {
+            this.apk = apk;
+            Header(L.T("Android uygulaması", "Android app"),
+                   L.T("Ekran kapalıyken de çalışır; sustur ve durdur bildirimde", "Keeps working with the screen off; mute and stop from the notification"));
+            int qs = Theme.P(220);
+            int top = Y;
+            if (apk != null && url != "")
+            {
+                var q = new QrView();
+                q.Url = url;
+                q.Caption = L.T("APK'yı telefona indir", "Download the APK to the phone");
+                q.SetBounds(Pad, Y, qs, qs + Theme.P(26));
+                Controls.Add(q);
+            }
+            int tx = apk != null && url != "" ? Pad + qs + Theme.P(22) : Pad;
+            int tw = W - tx - Pad;
+            Y = top;
+            var bold = new Font(Font, FontStyle.Bold);
+            if (apk != null)
+            {
+                string[][] steps = {
+                    new[] { L.T("1. Kodu okut", "1. Scan the code"),
+                            L.T("Telefonun kamerasıyla okut. \"Bağlantı gizli değil\" uyarısında Gelişmiş → siteye ilerle. APK bilgisayardan iner, internet gerekmez.",
+                                "Scan it with the phone's camera. At \"connection is not private\" choose Advanced → proceed. The APK comes from this computer; no internet needed.") },
+                    new[] { L.T("2. Kur", "2. Install"),
+                            L.T("İndirilen dosyayı aç. Android \"bilinmeyen uygulama\" izni isterse tarayıcıya izin ver.",
+                                "Open the downloaded file. If Android asks to allow unknown apps, allow it for the browser.") },
+                    new[] { L.T("3. Bağlan", "3. Connect"),
+                            L.T("Penceredeki ana QR kodu okut ve sayfada \"Uygulamada aç\"a dokun; adres ve anahtar uygulamaya geçer.",
+                                "Scan the main QR code in the window and tap \"Open in app\" on the page; the address and key go to the app.") },
+                };
+                foreach (var s in steps)
+                {
+                    AddLabel(s[0], bold, Theme.Text, tx, tw);
+                    Y += Theme.P(2);
+                    AddLabel(s[1], Font, Theme.Sub, tx, tw);
+                    Y += Theme.P(10);
+                }
+            }
+            else
+            {
+                AddLabel(L.T("Bu sürümde APK yok. GitHub'daki sürüm sayfasından BrokenMicrophone-<sürüm>.apk dosyasını indir.",
+                             "This build has no APK. Download BrokenMicrophone-<version>.apk from the releases page on GitHub."), Font, Theme.Sub, tx, tw);
+                Y += Theme.P(10);
+            }
+            Y = Math.Max(Y, top + qs + Theme.P(26)) + Theme.P(18);
+
+            var save = new FlatButton(apk != null ? L.T("APK'yı kaydet…", "Save the APK…") : L.T("Sürümler sayfası", "Releases page"), BtnKind.Secondary);
+            save.Font = Font;
+            save.SetBounds(Pad, Y, Theme.P(200), Theme.P(40));
+            save.Click += delegate { if (this.apk != null) Save(); else Open(AppInfo.Repo + "/releases/latest"); };
+            Controls.Add(save);
+            var ok = new FlatButton(L.T("Kapat", "Close"), BtnKind.Primary);
+            ok.Font = Font;
+            ok.SetBounds(W - Pad - Theme.P(130), Y, Theme.P(130), Theme.P(40));
+            ok.Click += delegate { Close(); };
+            Controls.Add(ok);
+            Y += Theme.P(40) + Pad;
+            ClientSize = new Size(W, Y);
+        }
+
+        void Save()
+        {
+            using (var d = new SaveFileDialog())
+            {
+                d.FileName = "BrokenMicrophone-" + AppInfo.Version + ".apk";
+                d.Filter = "Android APK (*.apk)|*.apk";
+                d.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                if (d.ShowDialog(this) != DialogResult.OK) return;
+                try { System.IO.File.WriteAllBytes(d.FileName, apk); }
+                catch (Exception ex) { MessageBox.Show(this, ex.Message, AppInfo.Name, MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            }
+        }
+
+        static void Open(string url)
+        {
+            try { System.Diagnostics.Process.Start(url); } catch { }
+        }
+    }
+
     // ------------------------------------------------------------------ Bağlanamıyor musun?
     class ConnectHelpDialog : DarkDialog
     {
