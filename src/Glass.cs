@@ -115,6 +115,14 @@ namespace BrokenMicrophone
             }
         }
 
+        /// <summary>Zemin rengindeki düz yazı ve resimleri (alt denetimleriyle) saydam yapar.</summary>
+        public static void SeeThrough(Control c)
+        {
+            if ((c is Label || c is PictureBox) && c.BackColor.A == 255 && c.BackColor.ToArgb() == Theme.Bg.ToArgb())
+                c.BackColor = Color.Transparent;
+            foreach (Control k in c.Controls) SeeThrough(k);
+        }
+
         /// <summary>Denetimin altında kalanı (zemin + kartlar) çizer. Yüzey yoksa false.</summary>
         public static bool PaintUnder(Graphics g, Control c)
         {

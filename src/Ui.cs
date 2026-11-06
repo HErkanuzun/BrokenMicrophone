@@ -105,7 +105,9 @@ namespace BrokenMicrophone
         // Denetimin altını çizer: cam sayfadaysa zemin ve kartlar, değilse düz arka plan rengi
         public static Graphics Prep(PaintEventArgs e, Control c)
         {
-            if (!Glass.PaintUnder(e.Graphics, c)) e.Graphics.Clear(c.BackColor);
+            var self = c as Ctl;
+            if (self != null && c.Parent is Ctl && !(c.Parent is ISurface)) self.PaintParentUnder(e.Graphics);   // ör. kart içindeki düğme
+            else if (!Glass.PaintUnder(e.Graphics, c)) e.Graphics.Clear(c.BackColor);
             return Prep(e);
         }
 
@@ -167,14 +169,28 @@ namespace BrokenMicrophone
     }
 
     // ------------------------------------------------------------------ Ortak taban
-    // Titremeden kaydırılabilen panel (ana pencerenin duyarlı sayfası için)
-    class BufferedPanel : Panel
+    // Titremeden kaydırılabilen panel (ana pencerenin duyarlı sayfası için). Pencere cam zeminliyse zemini o çizer;
+    // üstüne eklenen düz yazı ve resimler saydam olur (koyu kutu görünmez).
+    class BufferedPanel : Panel, ISurface
     {
         public BufferedPanel()
         {
             DoubleBuffered = true;
             SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
         }
+
+        public void PaintSurface(Graphics g, Rectangle r)
+        {
+            var f = FindForm();
+            if (f is ISurface) Glass.Backdrop(g, f.ClientSize, f.PointToClient(PointToScreen(Point.Empty)), r);
+            else using (var b = new SolidBrush(BackColor)) g.FillRectangle(b, r);
+        }
+
+        protected override void OnPaintBackground(PaintEventArgs e) { PaintSurface(e.Graphics, e.ClipRectangle); }
+        // zemin pencereye sabit: kayınca her şey yeniden çizilir (Windows'un kaydırması zemini de kaydırırdı)
+        protected override void OnScroll(ScrollEventArgs se) { base.OnScroll(se); Invalidate(true); }
+        protected override void OnMouseWheel(MouseEventArgs e) { base.OnMouseWheel(e); Invalidate(true); }
+        protected override void OnControlAdded(ControlEventArgs e) { base.OnControlAdded(e); Glass.SeeThrough(e.Control); }
     }
 
     class Ctl : Control
@@ -197,6 +213,17 @@ namespace BrokenMicrophone
         protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
         protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
         protected Color C(Color c) { return Enabled ? c : Theme.Dim(c); }
+
+        // Üst denetim de özel çiziliyorsa (ör. cam kart), bu denetimin altında kalan kısmını çizer
+        internal void PaintParentUnder(Graphics g)
+        {
+            var p = Parent;
+            var st = g.Save();
+            g.TranslateTransform(-Left, -Top);
+            var area = new Rectangle(Left, Top, Width, Height);
+            using (var pe = new PaintEventArgs(g, area)) InvokePaint(p, pe);
+            g.Restore(st);
+        }
 
         // Ayar uygulanmışken kilitli (sisli) görünür
         bool fogged;
