@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.media.AudioDeviceCallback;
@@ -45,12 +46,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Ekranlar: ilk açılışta dil seçimi → ana ekran (büyük mikrofon düğmesi + QR okut) → Ayarlar / QR okuyucu.
+ * İlk açılışta dil seçimi; sonra alttaki sekme çubuğuyla dört sayfa: Mikrofon · QR Okut · Ses · Ayarlar.
  * Bilgisayar QR kodla eklenir; elle giriş Ayarlar'da.
  */
 public class MainActivity extends Activity implements Hub.Listener {
     static final int DEFAULT_PORT = 47820;
-    private static final int WELCOME = 0, HOME = 1, SETTINGS = 2, SCAN = 3;
+    private static final int WELCOME = 0, HOME = 1, SETTINGS = 2, SCAN = 3, AUDIO = 4;
     private static final int REQ_START = 1, REQ_BT = 2, REQ_CAMERA = 3;
 
     private SharedPreferences prefs;
@@ -59,6 +60,10 @@ public class MainActivity extends Activity implements Hub.Listener {
 
     private FrameLayout root;
     private int screen = -1;
+
+    // sekmeler
+    private LinearLayout shell, tabBar;
+    private FrameLayout content;
 
     // ana ekran
     private View home;
@@ -150,7 +155,7 @@ public class MainActivity extends Activity implements Hub.Listener {
 
     @Override
     public void onBackPressed() {
-        if (screen == SETTINGS || screen == SCAN) show(HOME);
+        if (screen != HOME && screen != WELCOME) show(HOME);
         else super.onBackPressed();
     }
 
@@ -158,28 +163,119 @@ public class MainActivity extends Activity implements Hub.Listener {
     private void show(int s) {
         if (scanner != null) { scanner.stop(); scanner = null; }
         setRequestedOrientation(s == SCAN ? ActivityInfo.SCREEN_ORIENTATION_PORTRAIT : ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+        if (s == WELCOME) {
+            shell = null;
+            View v = buildWelcome();
+            guard(v);
+            root.removeAllViews();
+            root.addView(v, new FrameLayout.LayoutParams(-1, -1));
+            screen = s;
+            return;
+        }
+        if (shell == null) buildShell();
         View v;
         switch (s) {
-            case WELCOME: v = buildWelcome(); break;
             case SETTINGS: v = buildSettings(); break;
+            case AUDIO: v = buildAudio(); break;
             case SCAN: v = buildScan(); break;
             default:
                 if (home == null) home = buildHome();
                 v = home;
         }
         guard(v);
-        root.removeAllViews();
+        content.removeAllViews();
         if (v.getParent() != null) ((ViewGroup) v.getParent()).removeView(v);
-        root.addView(v, new FrameLayout.LayoutParams(-1, -1));
+        content.addView(v, new FrameLayout.LayoutParams(-1, -1));
         screen = s;
+        markTab(s);
         if (s == HOME) { changed(); showUpdate(); }
         if (s == SCAN && scanner != null && resumed) scanner.start();
+    }
+
+    /** Sayfa alanı + alttaki cam sekme çubuğu (iOS tarzı). */
+    private void buildShell() {
+        shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        content = new FrameLayout(this);
+        shell.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
+        final FrameLayout barWrap = new FrameLayout(this);
+        tabBar = new LinearLayout(this);
+        tabBar.setOrientation(LinearLayout.HORIZONTAL);
+        tabBar.setBackground(Ui.glass(this, 30, 0xF01D222B, 0xF0151920, 0x33FFFFFF));
+        tabBar.setPadding(px(6), px(6), px(6), px(6));
+        tabBar.setElevation(px(8));
+        addTab(HOME, R.drawable.ic_mic, L.t("Mikrofon", "Microphone"));
+        addTab(SCAN, R.drawable.ic_scan, L.t("QR Okut", "Scan"));
+        addTab(AUDIO, R.drawable.ic_tune, L.t("Ses", "Audio"));
+        addTab(SETTINGS, R.drawable.ic_settings, L.t("Ayarlar", "Settings"));
+        Ui.Column barCol = new Ui.Column(this, 520);
+        barCol.addView(tabBar, new LinearLayout.LayoutParams(-1, px(68)));
+        FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_HORIZONTAL);
+        bl.setMargins(px(14), px(4), px(14), px(10));
+        barWrap.addView(barCol, bl);
+        shell.addView(barWrap, new LinearLayout.LayoutParams(-1, -2));
+        shell.setOnApplyWindowInsetsListener((view, in) -> {
+            int l, top, r, bot;
+            if (Build.VERSION.SDK_INT >= 30) {
+                android.graphics.Insets i = in.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                l = i.left; top = i.top; r = i.right; bot = i.bottom;
+                int ime = in.getInsets(WindowInsets.Type.ime()).bottom;
+                barWrap.setVisibility(ime > 0 ? View.GONE : View.VISIBLE);   // klavye açıkken çubuk gizlenir
+                content.setPadding(l, top, r, ime > 0 ? ime : 0);
+            } else {
+                l = in.getSystemWindowInsetLeft(); top = in.getSystemWindowInsetTop();
+                r = in.getSystemWindowInsetRight(); bot = in.getStableInsetBottom();
+                content.setPadding(l, top, r, 0);
+            }
+            barWrap.setPadding(l, 0, r, bot);
+            return in;
+        });
+        guard(shell);
+        root.removeAllViews();
+        root.addView(shell, new FrameLayout.LayoutParams(-1, -1));
+        shell.requestApplyInsets();
+    }
+
+    private void addTab(final int id, int icon, String label) {
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setGravity(Gravity.CENTER);
+        item.setClickable(true);
+        item.setFocusable(true);
+        item.setTag(id);
+        item.setContentDescription(label);
+        ImageView iv = new ImageView(this);
+        iv.setImageResource(icon);
+        iv.setScaleType(ImageView.ScaleType.CENTER);
+        item.addView(iv, new LinearLayout.LayoutParams(px(54), px(32)));
+        TextView tv = text(11, Ui.SUB, true);
+        tv.setText(label);
+        tv.setSingleLine(true);
+        tv.setGravity(Gravity.CENTER);
+        item.addView(tv, new LinearLayout.LayoutParams(-2, -2));
+        item.setOnClickListener(v -> { if (screen != id) { v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); show(id); } });
+        tabBar.addView(item, new LinearLayout.LayoutParams(0, -1, 1));
+    }
+
+    private void markTab(int s) {
+        if (tabBar == null) return;
+        for (int i = 0; i < tabBar.getChildCount(); i++) {
+            LinearLayout item = (LinearLayout) tabBar.getChildAt(i);
+            boolean on = (Integer) item.getTag() == s;
+            ImageView iv = (ImageView) item.getChildAt(0);
+            TextView tv = (TextView) item.getChildAt(1);
+            iv.setImageTintList(ColorStateList.valueOf(on ? Ui.ACCENT_HI : 0xFF8A93A3));
+            iv.setBackground(on ? Ui.solid(this, 16, 0x332EC4B0) : null);
+            tv.setTextColor(on ? Ui.TEXT : 0xFF8A93A3);
+            item.setSelected(on);
+        }
     }
 
     /** Dil değişince her şey yeniden kurulur. */
     private void relang(boolean tr) {
         L.set(this, tr);
         home = null;
+        shell = null;
         MicService.send(this, MicService.ACT_REOPEN);   // bildirim metni de yeni dilde
     }
 
@@ -278,7 +374,9 @@ public class MainActivity extends Activity implements Hub.Listener {
     }
 
     /** Kaydırılabilir, sistem çubuklarına göre boşluk bırakan, ortalanmış sütun. */
-    private Ui.Column page(ScrollView[] out, boolean fill) {
+    private Ui.Column page(ScrollView[] out, boolean fill) { return page(out, fill, false); }
+
+    private Ui.Column page(ScrollView[] out, boolean fill, boolean ownInsets) {
         ScrollView scroll = new ScrollView(this);
         scroll.setClipToPadding(false);
         scroll.setFillViewport(true);
@@ -288,7 +386,7 @@ public class MainActivity extends Activity implements Hub.Listener {
         Ui.Column col = new Ui.Column(this, 520);
         frame.addView(col, new FrameLayout.LayoutParams(-1, fill ? -1 : -2, Gravity.CENTER_HORIZONTAL));
         col.setPadding(px(18), px(12), px(18), px(18));
-        insets(scroll);
+        if (ownInsets) insets(scroll);
         out[0] = scroll;
         return col;
     }
@@ -308,6 +406,14 @@ public class MainActivity extends Activity implements Hub.Listener {
         });
     }
 
+    /** iOS tarzı büyük sayfa başlığı. */
+    private void title(LinearLayout parent, String s) {
+        TextView t = text(30, Ui.TEXT, true);
+        t.setText(s);
+        t.setPadding(px(2), px(10), 0, px(16));
+        parent.addView(t);
+    }
+
     private View spacer(LinearLayout parent) {
         View s = new View(this);
         parent.addView(s, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -317,7 +423,7 @@ public class MainActivity extends Activity implements Hub.Listener {
     // ------------------------------------------------------------------ ilk açılış: dil
     private View buildWelcome() {
         ScrollView[] s = new ScrollView[1];
-        Ui.Column col = page(s, true);
+        Ui.Column col = page(s, true, true);
         col.setGravity(Gravity.CENTER_HORIZONTAL);
         spacer(col);
         ImageView logo = new ImageView(this);
@@ -363,7 +469,6 @@ public class MainActivity extends Activity implements Hub.Listener {
         title.setText("Broken Microphone");
         title.setPadding(px(12), 0, 0, 0);
         head.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        head.addView(icon(R.drawable.ic_settings, () -> show(SETTINGS)), new LinearLayout.LayoutParams(px(44), px(44)));
         col.addView(head);
 
         // güncelleme bildirimi
@@ -423,6 +528,7 @@ public class MainActivity extends Activity implements Hub.Listener {
 
         scanBtn = pill(L.t("QR kodu okut", "Scan QR code"), true);
         scanBtn.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_scan, 0, 0, 0);
+        scanBtn.setCompoundDrawableTintList(ColorStateList.valueOf(Ui.ON_ACCENT));
         scanBtn.setCompoundDrawablePadding(px(10));
         scanBtn.setMinHeight(px(54));
         scanBtn.setOnClickListener(v -> show(SCAN));
@@ -457,16 +563,7 @@ public class MainActivity extends Activity implements Hub.Listener {
     private View buildSettings() {
         ScrollView[] s = new ScrollView[1];
         Ui.Column col = page(s, false);
-
-        LinearLayout bar = new LinearLayout(this);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(0, px(6), 0, px(14));
-        bar.addView(icon(R.drawable.ic_back, () -> show(HOME)), new LinearLayout.LayoutParams(px(44), px(44)));
-        TextView title = text(20, Ui.TEXT, true);
-        title.setText(L.t("Ayarlar", "Settings"));
-        title.setPadding(px(14), 0, 0, 0);
-        bar.addView(title);
-        col.addView(bar);
+        title(col, L.t("Ayarlar", "Settings"));
 
         // dil
         LinearLayout lang = card(col);
@@ -489,6 +586,7 @@ public class MainActivity extends Activity implements Hub.Listener {
         pc.addView(cur);
         TextView scan = pill(L.t("QR kodu okut", "Scan QR code"), true);
         scan.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_scan, 0, 0, 0);
+        scan.setCompoundDrawableTintList(ColorStateList.valueOf(Ui.ON_ACCENT));
         scan.setCompoundDrawablePadding(px(10));
         scan.setOnClickListener(v -> show(SCAN));
         add(pc, scan, 12);
@@ -544,35 +642,6 @@ public class MainActivity extends Activity implements Hub.Listener {
             add(pc, forget, 10);
         }
 
-        // mikrofon
-        LinearLayout mic = card(col);
-        heading(mic, L.t("Mikrofon", "Microphone"));
-        micSpin = new Spinner(this, Spinner.MODE_DROPDOWN);
-        micSpin.setBackground(Ui.field(this));
-        micSpin.setPopupBackgroundDrawable(Ui.solid(this, 14, 0xF21B1F27));
-        micSpin.setPadding(px(4), px(4), px(4), px(4));
-        micSpin.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
-                if (fillingSpinner) return;
-                String k = micKeys.get(pos);
-                if (k.equals(prefs.getString("device", ""))) return;
-                prefs.edit().putString("device", k).apply();
-                needBluetooth();
-                MicService.send(MainActivity.this, MicService.ACT_REOPEN);
-            }
-            @Override public void onNothingSelected(AdapterView<?> parent) { }
-        });
-        mic.addView(micSpin, new LinearLayout.LayoutParams(-1, px(50)));
-        fillMics();
-        TextView btHint = text(13, Ui.SUB, false);
-        btHint.setText(L.t("Kablosuz kulaklık bağlıysa listede görünür.", "A connected wireless headset shows up in the list."));
-        btHint.setPadding(px(2), px(8), 0, px(6));
-        mic.addView(btHint);
-        effect(mic, L.t("Gürültü azaltma", "Noise suppression"), "ns", true);
-        effect(mic, L.t("Yankı engelleme", "Echo cancellation"), "aec", false);
-        effect(mic, L.t("Otomatik ses seviyesi", "Automatic gain"), "agc", false);
-
         // güncellemeler
         LinearLayout up = card(col);
         heading(up, L.t("Güncellemeler", "Updates"));
@@ -617,6 +686,47 @@ public class MainActivity extends Activity implements Hub.Listener {
         lic.setText("Broken Microphone · Android " + BuildInfo.VERSION + " · MIT");
         lic.setGravity(Gravity.CENTER);
         add(about, lic, 12);
+        return s[0];
+    }
+
+    /** Ses sekmesi: hangi mikrofon ve ses işleme. */
+    private View buildAudio() {
+        ScrollView[] s = new ScrollView[1];
+        Ui.Column col = page(s, false);
+        title(col, L.t("Ses", "Audio"));
+        LinearLayout mic = card(col);
+        heading(mic, L.t("Mikrofon", "Microphone"));
+        micSpin = new Spinner(this, Spinner.MODE_DROPDOWN);
+        micSpin.setBackground(Ui.field(this));
+        micSpin.setPopupBackgroundDrawable(Ui.solid(this, 14, 0xF21B1F27));
+        micSpin.setPadding(px(4), px(4), px(4), px(4));
+        micSpin.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int pos, long id) {
+                if (fillingSpinner) return;
+                String k = micKeys.get(pos);
+                if (k.equals(prefs.getString("device", ""))) return;
+                prefs.edit().putString("device", k).apply();
+                needBluetooth();
+                MicService.send(MainActivity.this, MicService.ACT_REOPEN);
+            }
+            @Override public void onNothingSelected(AdapterView<?> parent) { }
+        });
+        mic.addView(micSpin, new LinearLayout.LayoutParams(-1, px(50)));
+        fillMics();
+        TextView btHint = text(13, Ui.SUB, false);
+        btHint.setText(L.t("Kablosuz kulaklık bağlıysa listede görünür.", "A connected wireless headset shows up in the list."));
+        btHint.setPadding(px(2), px(8), 0, px(6));
+        mic.addView(btHint);
+        effect(mic, L.t("Gürültü azaltma", "Noise suppression"), "ns", true);
+        effect(mic, L.t("Yankı engelleme", "Echo cancellation"), "aec", false);
+        effect(mic, L.t("Otomatik ses seviyesi", "Automatic gain"), "agc", false);
+
+        TextView note = text(13, Ui.SUB, false);
+        note.setText(L.t("Değişiklikler hemen uygulanır; yayın sürerken de değiştirebilirsin.",
+                "Changes apply right away, even while streaming."));
+        note.setPadding(px(4), 0, px(4), 0);
+        col.addView(note);
         return s[0];
     }
 
@@ -687,16 +797,12 @@ public class MainActivity extends Activity implements Hub.Listener {
 
         LinearLayout over = new LinearLayout(this);
         over.setOrientation(LinearLayout.VERTICAL);
-        over.setPadding(px(18), px(12), px(18), px(28));
-        insets(over);
-        LinearLayout bar = new LinearLayout(this);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.addView(icon(R.drawable.ic_back, () -> show(HOME)), new LinearLayout.LayoutParams(px(44), px(44)));
-        TextView title = text(19, Color.WHITE, true);
-        title.setText(L.t("QR kodu okut", "Scan QR code"));
-        title.setPadding(px(14), 0, 0, 0);
-        bar.addView(title);
-        over.addView(bar);
+        over.setPadding(px(20), px(12), px(20), px(24));
+        TextView title = text(30, Color.WHITE, true);
+        title.setText(L.t("QR Okut", "Scan"));
+        title.setShadowLayer(8, 0, 0, 0xCC000000);
+        title.setPadding(0, px(10), 0, 0);
+        over.addView(title);
         spacer(over);
         TextView tip = text(15, Color.WHITE, false);
         tip.setGravity(Gravity.CENTER);
@@ -780,11 +886,7 @@ public class MainActivity extends Activity implements Hub.Listener {
         muteBtn.setVisibility(Hub.running ? View.VISIBLE : View.GONE);
         muteBtn.setText(Hub.muted ? L.t("Sesi aç", "Unmute") : L.t("Sustur", "Mute"));
         boolean has = hasTarget();
-        scanBtn.setVisibility(Hub.running ? View.GONE : View.VISIBLE);
-        scanBtn.setText(has ? L.t("Başka bilgisayar: QR okut", "Another computer: scan QR") : L.t("QR kodu okut", "Scan QR code"));
-        scanBtn.setBackground(has ? Ui.glass(this, 24, 0x22FFFFFF, 0x0FFFFFFF, 0x30FFFFFF) : Ui.solid(this, 24, Ui.ACCENT));
-        scanBtn.setTextColor(has ? Ui.TEXT : Ui.ON_ACCENT);
-        if (scanBtn.getCompoundDrawablesRelative()[0] != null) scanBtn.getCompoundDrawablesRelative()[0].mutate().setTint(has ? Ui.TEXT : Ui.ON_ACCENT);
+        scanBtn.setVisibility(has || Hub.running ? View.GONE : View.VISIBLE);
         pcLine.setText(has ? L.t("Bilgisayar: ", "Computer: ") + targetLabel() : "");
         pcLine.setVisibility(has ? View.VISIBLE : View.GONE);
         micBtn.set(micMode(), 0);
