@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -445,39 +446,96 @@ namespace BrokenMicrophone
     // ------------------------------------------------------------------ Sanal mikrofon
     class DriverDialog : DarkDialog
     {
+        readonly Label lblState;
+        readonly FlatButton btnInstall, btnClose;
+        string dir;
+        bool busy;
+
         public DriverDialog() : base(560)
         {
-            Header(L.T("Sanal mikrofon", "Virtual microphone"), L.T("Telefonun sesinin başka programlarda mikrofon olarak görünmesi için", "So the phone's audio shows up as a microphone in other apps"));
-            AddLabel(L.T("Windows'ta bir sesin Discord, Zoom ya da oyunlarda mikrofon olarak görünmesi için bir sanal ses sürücüsü gerekir. Broken Microphone sesi bu sürücünün girişine verir; diğer programlar da sürücünün çıkışını mikrofon olarak seçer.",
-                         "For audio to show up as a microphone in Discord, Zoom or games, Windows needs a virtual audio driver. Broken Microphone plays the audio into the driver's input, and other apps pick the driver's output as their microphone."),
+            Header(L.T("Sanal mikrofon", "Virtual microphone"), L.T("Telefonun sesinin Discord gibi programlarda mikrofon olarak görünmesi için", "So the phone's audio shows up as a microphone in apps like Discord"));
+            AddLabel(L.T("Windows'ta bir sesin Discord, Zoom ya da oyunlarda mikrofon olarak görünmesi için bir sanal ses sürücüsü gerekir. Broken Microphone bunun için VB-Audio'nun ücretsiz VB-CABLE sürücüsünü kurar.",
+                         "For audio to show up as a microphone in Discord, Zoom or games, Windows needs a virtual audio driver. Broken Microphone installs VB-Audio's free VB-CABLE driver for this."),
                      Font, Theme.Text, Pad, W - Pad * 2);
             Y += Theme.P(14);
             var bold = new Font(Font, FontStyle.Bold);
-            AddLabel(L.T("Şimdilik: VB-CABLE (ücretsiz)", "For now: VB-CABLE (free)"), bold, Theme.Text, Pad, W - Pad * 2);
+            AddLabel(L.T("Güvenli kurulum", "Safe install"), bold, Theme.Text, Pad, W - Pad * 2);
             Y += Theme.P(2);
-            AddLabel(L.T("1. Aşağıdaki düğmeyle VB-Audio'nun sitesini aç ve \"VBCABLE_Driver_Pack\" zip'ini indir.\n2. Zip'i bir klasöre çıkar, VBCABLE_Setup_x64.exe'ye sağ tıkla → Yönetici olarak çalıştır → Install Driver.\n3. Bilgisayarı yeniden başlat ve Broken Microphone'u aç: \"CABLE Input\" kendiliğinden seçilir.",
-                         "1. Open VB-Audio's site with the button below and download the \"VBCABLE_Driver_Pack\" zip.\n2. Extract it, right-click VBCABLE_Setup_x64.exe → Run as administrator → Install Driver.\n3. Restart the computer and open Broken Microphone: \"CABLE Input\" is selected automatically."),
+            AddLabel(L.T("Bir siteye gitmen gerekmez. Paket doğrudan VB-Audio'nun resmi sunucusundan iner ve kurulum programı ancak VB-Audio'nun geçerli dijital imzasını taşıyorsa açılır. Sahte ya da değiştirilmiş bir dosya çalıştırılmaz.\n\nKur'a bas → Windows yönetici izni sorar → açılan pencerede \"Install Driver\" → bitince bilgisayarı yeniden başlat.",
+                         "No website to visit. The package comes straight from VB-Audio's official server, and the setup only opens if it carries VB-Audio's valid digital signature. A fake or modified file is never run.\n\nPress Install → Windows asks for administrator permission → choose \"Install Driver\" → restart the computer when it's done."),
                      Font, Theme.Sub, Pad, W - Pad * 2);
             Y += Theme.P(14);
-            AddLabel(L.T("Yakında: Broken Microphone sürücüsü", "Coming: the Broken Microphone driver"), bold, Theme.Text, Pad, W - Pad * 2);
-            Y += Theme.P(2);
-            AddLabel(L.T("Kendi açık kaynak sürücümüz hazırlanıyor. Windows'un onu yüklemesi için Microsoft imzası gerekiyor; imza gelince kurulum paketine eklenecek ve mikrofon \"Broken Microphone\" adıyla görünecek.",
-                         "Our own open-source driver is in the works. Windows needs it to be signed by Microsoft; once it is, it will ship in the setup and the microphone will show up as \"Broken Microphone\"."),
-                     Font, Theme.Sub, Pad, W - Pad * 2);
-            Y += Theme.P(20);
+            lblState = AddLabel(" ", Font, Theme.Sub, Pad, W - Pad * 2);
+            lblState.Height = Theme.P(40);
+            Y = lblState.Bottom + Theme.P(12);
 
-            var dl = new FlatButton(L.T("VB-CABLE sitesini aç", "Open the VB-CABLE site"), BtnKind.Primary);
-            dl.Font = Font;
-            dl.SetBounds(Pad, Y, Theme.P(230), Theme.P(40));
-            dl.Click += delegate { try { System.Diagnostics.Process.Start("https://vb-audio.com/Cable/"); } catch { } };
-            Controls.Add(dl);
-            var ok = new FlatButton(L.T("Kapat", "Close"), BtnKind.Secondary);
-            ok.Font = Font;
-            ok.SetBounds(W - Pad - Theme.P(130), Y, Theme.P(130), Theme.P(40));
-            ok.Click += delegate { Close(); };
-            Controls.Add(ok);
+            btnInstall = new FlatButton(L.T("Kur", "Install"), BtnKind.Primary);
+            btnInstall.Font = Font;
+            btnInstall.SetBounds(Pad, Y, Theme.P(200), Theme.P(40));
+            btnInstall.Click += delegate { Install(); };
+            Controls.Add(btnInstall);
+            btnClose = new FlatButton(L.T("Kapat", "Close"), BtnKind.Secondary);
+            btnClose.Font = Font;
+            btnClose.SetBounds(W - Pad - Theme.P(130), Y, Theme.P(130), Theme.P(40));
+            btnClose.Click += delegate { Close(); };
+            Controls.Add(btnClose);
             Y += Theme.P(40) + Pad;
             ClientSize = new Size(W, Y);
+        }
+
+        void State(string s, Color c)
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired) { BeginInvoke((MethodInvoker)delegate { State(s, c); }); return; }
+            lblState.ForeColor = c;
+            lblState.Text = s;
+        }
+
+        void Install()
+        {
+            if (busy) return;
+            busy = true;
+            btnInstall.Enabled = false;
+            State(L.T("İndiriliyor…", "Downloading…"), Theme.Sub);
+            var th = new System.Threading.Thread(delegate ()
+            {
+                try
+                {
+                    dir = VbCable.Prepare(delegate (int pct) { if (pct >= 0) State(L.T("İndiriliyor… %", "Downloading… ") + pct + (L.T("", "%")), Theme.Sub); });
+                    State(L.T("İmza doğrulandı (VB-Audio). Kurulum açılıyor: Windows izin isterse Evet, sonra \"Install Driver\".",
+                              "Signature verified (VB-Audio). Opening the setup: allow it in Windows, then choose \"Install Driver\"."), Theme.Accent);
+                    Process p;
+                    try { p = VbCable.Run(dir); }
+                    catch (System.ComponentModel.Win32Exception) { State(L.T("Yönetici izni verilmedi; kurulum yapılmadı.", "Administrator permission wasn't given; nothing was installed."), Theme.Warn); Done(false); return; }
+                    if (p != null) p.WaitForExit();
+                    State(L.T("Kurulum penceresi kapandı. Sürücüyü kurduysan bilgisayarı yeniden başlat; Broken Microphone sanal mikrofonu kendiliğinden seçer.",
+                              "The setup closed. If you installed the driver, restart the computer; Broken Microphone picks the virtual microphone automatically."), Theme.Accent);
+                    Done(true);
+                }
+                catch (Exception ex)
+                {
+                    State(L.T("Kurulamadı: ", "Couldn't install: ") + ex.Message, Theme.Danger);
+                    Done(false);
+                }
+            });
+            th.IsBackground = true;
+            th.Start();
+        }
+
+        void Done(bool ok)
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired) { BeginInvoke((MethodInvoker)delegate { Done(ok); }); return; }
+            busy = false;
+            btnInstall.Enabled = true;
+            btnInstall.Text = ok ? L.T("Tekrar aç", "Open again") : L.T("Tekrar dene", "Try again");
+            btnInstall.Invalidate();
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            base.OnFormClosed(e);
+            if (!busy) VbCable.Cleanup(dir);
         }
     }
 

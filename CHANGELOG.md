@@ -4,6 +4,9 @@ All notable changes to Broken Microphone. The format follows [Keep a Changelog](
 
 ## [Unreleased]
 
+### Changed
+- "Install a virtual microphone" no longer sends you to a website: Broken Microphone downloads VB-CABLE from VB-Audio's official server itself and only runs the setup if it carries VB-Audio's valid digital signature.
+
 ### Fixed
 - The audio only plays on the speakers if you turn on "Hear myself on the speakers" (off by default), so you no longer hear yourself.
 - If a virtual microphone is installed but a speaker is selected, the window says the audio isn't reaching Discord and offers "Send to the virtual microphone". Virtual microphones are labelled in the list.

@@ -53,7 +53,7 @@ iPhone'da sayfa yeter. Android'de istersen küçük bir uygulama da var (~90 KB,
 
 Bir sesin başka programlarda **mikrofon olarak** görünmesi için Windows'ta bir sanal ses sürücüsü gerekir. Broken Microphone sesi bu sürücünün girişine verir, diğer programlar da sürücünün çıkışını mikrofon olarak seçer.
 
-- **Şimdilik:** ücretsiz [VB-CABLE](https://vb-audio.com/Cable/). Kurduktan sonra bilgisayarı yeniden başlat; Broken Microphone "CABLE Input"u kendisi seçer, diğer programlarda **CABLE Output**'u mikrofon olarak seç. Programdaki **Sanal mikrofonu kur…** düğmesi adımları gösterir.
+- **Şimdilik:** VB-Audio'nun ücretsiz VB-CABLE sürücüsü. Programdaki **Sanal mikrofonu kur…** → **Kur** düğmesi onu kendisi kurar: paket VB-Audio'nun resmi sunucusundan iner, kurulum programı ancak VB-Audio'nun geçerli dijital imzasını taşıyorsa açılır (siteye gitmen gerekmez, sahte dosya çalıştırılmaz). Bitince bilgisayarı yeniden başlat; Broken Microphone sanal mikrofonu kendisi seçer, Discord gibi programlarda **CABLE Output**'u mikrofon olarak seç. Kendi sesini duymak istersen "Kendi sesimi hoparlörden duy"u aç.
 - **Yakında:** kendi açık kaynak sürücümüz. Windows'un yüklemesi için Microsoft imzası gerekiyor; imza gelince kurulum paketine eklenecek ve mikrofon **Broken Microphone** adıyla görünecek.
 
 Sanal mikrofon yoksa program yine çalışır ama ses sadece hoparlörden duyulur.
@@ -126,7 +126,7 @@ Windows'ta bozuk ya da sorunlu bir şeyi bulup onunla yaşamanı sağlayan küç
 
 The page works on iPhone, iPad and Android. A wireless headset connected to the phone shows up in its *Microphone* list. Noise suppression, echo cancellation and automatic gain can be toggled; mute shows on the computer too. Several phones can connect; the one that talks (or that you click) is used, and their audio is never mixed.
 
-**Virtual microphone:** for audio to show up as a microphone in other apps, Windows needs a virtual audio driver. For now use the free [VB-CABLE](https://vb-audio.com/Cable/) and pick **CABLE Output** as the microphone. Our own open-source **Broken Microphone** driver is coming once it is signed by Microsoft. Without a virtual microphone the audio only plays on the speakers.
+**Virtual microphone:** for audio to show up as a microphone in other apps, Windows needs a virtual audio driver. For now Broken Microphone installs VB-Audio's free VB-CABLE for you (**Install a virtual microphone…** → **Install**): the package is downloaded from VB-Audio's official server and the setup only runs if it carries VB-Audio's valid digital signature. Then pick **CABLE Output** as the microphone. Our own open-source **Broken Microphone** driver is coming once it is signed by Microsoft. Audio plays on your speakers only if you turn on "Hear myself on the speakers".
 
 **Install:** download `BrokenMicrophone-1.1-Setup.exe` from the [latest release](https://github.com/HErkanuzun/BrokenMicrophone/releases/latest). The setup asks for administrator rights because it adds a Windows Firewall rule that allows **only this app, only on private networks**. A portable ZIP is also available; if the phone can't connect, use *Can't connect? → Allow through the firewall* in the app.
 

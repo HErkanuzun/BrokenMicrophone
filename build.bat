@@ -15,6 +15,7 @@ if not exist bin mkdir bin
   /resource:src\app.ico,BrokenMicrophone.app.ico /resource:src\logo.png,BrokenMicrophone.logo.png ^
   /resource:src\web\index.html,BrokenMicrophone.web.index.html /resource:src\web\worklet.js,BrokenMicrophone.web.worklet.js ^
   /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Core.dll /r:System.Web.Extensions.dll ^
+  /r:System.IO.Compression.dll /r:System.IO.Compression.FileSystem.dll ^
   /out:bin\BrokenMicrophone.exe src\*.cs
 if errorlevel 1 (
   echo.
