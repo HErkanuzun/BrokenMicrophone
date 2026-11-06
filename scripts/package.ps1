@@ -43,7 +43,8 @@ if ($Iscc -eq '') {
     }
 }
 if ($Iscc -eq '' -or -not (Test-Path $Iscc)) { throw 'Inno Setup 6 (ISCC.exe) bulunamadı; -Iscc ile yolunu ver.' }
-& $Iscc /Q "/DAppVersion=$Version" (Join-Path $root 'installer\BrokenMicrophone.iss')
+$num = $Version -replace '-.*$', ''
+& $Iscc /Q "/DAppVersion=$Version" "/DAppNumVersion=$num" (Join-Path $root 'installer\BrokenMicrophone.iss')
 if ($LASTEXITCODE -ne 0) { throw "Kurulum paketi derlenemedi ($LASTEXITCODE)." }
 
 # ------------------------------------------------------------------ özetler

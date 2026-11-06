@@ -9,6 +9,10 @@
 #ifndef AppVersion
   #define AppVersion "1.0"
 #endif
+; Windows sürüm bilgisi sadece sayı kabul eder ("1.2-beta.1" -> "1.2")
+#ifndef AppNumVersion
+  #define AppNumVersion AppVersion
+#endif
 #define AppName "Broken Microphone"
 #define AppExe "BrokenMicrophone.exe"
 #define AppUrl "https://github.com/HErkanuzun/BrokenMicrophone"
@@ -24,7 +28,7 @@ AppPublisherURL={#AppUrl}
 AppSupportURL={#AppUrl}/issues
 AppUpdatesURL={#AppUrl}/releases
 AppCopyright=Copyright (c) 2026 HErkanuzun. MIT License.
-VersionInfoVersion={#AppVersion}.0.0
+VersionInfoVersion={#AppNumVersion}.0.0
 VersionInfoProductName={#AppName}
 VersionInfoDescription={#AppName} Setup
 DefaultDirName={autopf}\{#AppName}
