@@ -534,6 +534,40 @@ namespace BrokenMicrophone
         }
     }
 
+    // ------------------------------------------------------------------ Metin kutusu (cam alan içinde)
+    class TextField : Ctl
+    {
+        public readonly TextBox Box = new TextBox();
+        static readonly Color Fill = Color.FromArgb(36, 40, 50);
+
+        public TextField()
+        {
+            Cursor = Cursors.IBeam;
+            Box.BorderStyle = BorderStyle.None;
+            Box.BackColor = Fill;
+            Box.ForeColor = Theme.Text;
+            Controls.Add(Box);
+            Box.GotFocus += delegate { Invalidate(); };
+            Box.LostFocus += delegate { Invalidate(); };
+        }
+
+        protected override void OnFontChanged(EventArgs e) { Box.Font = Font; base.OnFontChanged(e); OnResize(e); }
+        protected override void OnResize(EventArgs e)
+        {
+            base.OnResize(e);
+            Box.SetBounds(Theme.P(14), (Height - Box.PreferredHeight) / 2, Math.Max(10, Width - Theme.P(28)), Box.PreferredHeight);
+        }
+        protected override void OnMouseDown(MouseEventArgs e) { Box.Focus(); base.OnMouseDown(e); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = Theme.Prep(e, this);
+            var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+            Theme.Fill(g, r, Theme.P(12), Fill);
+            Theme.Stroke(g, r, Theme.P(12), Box.Focused ? Theme.Accent : Color.FromArgb(60, 255, 255, 255), Box.Focused ? Theme.P(1.5f) : 1);
+        }
+    }
+
     class DarkMenuColors : ProfessionalColorTable
     {
         static readonly Color Bg = Color.FromArgb(27, 31, 39), Sel = Color.FromArgb(48, 66, 70), Edge = Color.FromArgb(58, 64, 76);

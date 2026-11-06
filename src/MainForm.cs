@@ -65,7 +65,11 @@ namespace BrokenMicrophone
         Picker pickOutput;
         Toggle tglMonitor;
         LevelMeter meter2;
-        FlatButton btnDriver;
+        FlatButton btnDriver, btnRename;
+        Label lblDiag, lblMicName;
+        TextField txtMicName;
+        MicName.Endpoint micEp;           // sanal mikrofonun kayıt ucu (Discord'da görünen ad)
+        string renameMsg;
 
         // Ayarlar
         Label secLang, secNet, lblFw, secAbout, lblApp, lblFoot;
@@ -451,9 +455,17 @@ namespace BrokenMicrophone
             tglMonitor.Checked = cfg.Monitor;
             tglMonitor.Changed += delegate (bool on) { cfg.Monitor = on; cfg.Save(); UpdateUi(); };
             meter2 = Add(new LevelMeter());
+            lblDiag = Text2(" ", Theme.Sub, 8.5f, FontStyle.Regular);
             secVirt = Section(L.T("Sanal mikrofon", "Virtual microphone"));
             lblVirt = Text2("", Theme.Text, 9.5f, FontStyle.Regular);
             btnDriver = Btn("", BtnKind.Primary, delegate { FixOutput(); });
+            micEp = MicName.Find();
+            lblMicName = Section(L.T("Programlarda görünen adı", "Name shown in apps"));
+            txtMicName = Add(new TextField());
+            txtMicName.Box.Text = micEp == null ? MicName.Default : micEp.Name.StartsWith("CABLE", StringComparison.OrdinalIgnoreCase) ? MicName.Default : micEp.Name;
+            txtMicName.Box.MaxLength = 40;
+            btnRename = Btn(L.T("Adını değiştir", "Rename"), BtnKind.Secondary, delegate { RenameMic(); });
+            txtMicName.Box.KeyDown += delegate (object s, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; RenameMic(); } };
 
             // ---- Ayarlar
             building = TabSettings;
@@ -690,7 +702,8 @@ namespace BrokenMicrophone
             secMon.Location = new Point(X + cp, Y + cp);
             tglMonitor.SetBounds(X + cp, secMon.Bottom + P(8), W - cp * 2, P(32));
             meter2.SetBounds(X + cp, tglMonitor.Bottom + P(12), W - cp * 2, P(8));
-            Y = meter2.Bottom + cp;
+            lblDiag.Location = new Point(X + cp, meter2.Bottom + P(8));
+            Y = lblDiag.Bottom + cp;
             Card(X, top, W, Y - top, Color.Empty);
 
             Y += P(14);
@@ -702,6 +715,16 @@ namespace BrokenMicrophone
             {
                 btnDriver.SetBounds(X + cp, Y + P(12), Math.Min(W - cp * 2, P(280)), P(42));
                 Y = btnDriver.Bottom;
+            }
+            bool named = micEp != null;
+            lblMicName.Visible = txtMicName.Visible = btnRename.Visible = named;
+            if (named)
+            {
+                lblMicName.Location = new Point(X + cp, Y + P(16));
+                int bw = Math.Min(P(170), (W - cp * 2) / 3);
+                txtMicName.SetBounds(X + cp, lblMicName.Bottom + P(8), W - cp * 2 - bw - P(10), P(42));
+                btnRename.SetBounds(txtMicName.Right + P(10), txtMicName.Top, bw, P(42));
+                Y = txtMicName.Bottom;
             }
             Y += cp;
             Card(X, top, W, Y - top, HasVirtual && !WrongOut ? Color.Empty : Theme.Warn);
@@ -770,12 +793,13 @@ namespace BrokenMicrophone
             }
         }
 
-        string MicName
+        string VirtualMicLabel
         {
             get
             {
                 if (output == null || !output.Virtual) return null;
                 string n = output.Name.ToLowerInvariant();
+                if (micEp != null) return micEp.Full;
                 if (n.Contains("broken microphone")) return "Broken Microphone";
                 if (n.Contains("cable")) return "CABLE Output (VB-Audio Virtual Cable)";
                 return output.Name;
@@ -832,7 +856,7 @@ namespace BrokenMicrophone
             else
             {
                 title = L.T("Mikrofon açık", "Microphone on");
-                string to = MicName != null ? MicName : cfg.Monitor ? L.T("hoparlör", "speakers") : L.T("hiçbir yere çalınmıyor", "not played anywhere");
+                string to = VirtualMicLabel != null ? VirtualMicLabel : cfg.Monitor ? L.T("hoparlör", "speakers") : L.T("hiçbir yere çalınmıyor", "not played anywhere");
                 sub = a.Name + (a.Mic != "" ? " (" + a.Mic + ")" : "") + "  →  " + to;
                 mode = OrbMode.Live;
             }
@@ -855,10 +879,10 @@ namespace BrokenMicrophone
                       L.T("Sanal mikrofonu kur…", "Install virtual mic…"), FixOutput);
 
             // Ses sekmesi
-            string mic = MicName;
+            string mic = VirtualMicLabel;
             if (mic != null)
-                lblOutHint.Text = string.Format(L.T("Discord, Zoom, Teams, OBS ya da oyunda mikrofon (giriş cihazı) olarak \"{0}\" seç.",
-                                                    "In Discord, Zoom, Teams, OBS or your game, pick \"{0}\" as the microphone (input device)."), mic);
+                lblOutHint.Text = string.Format(L.T("Discord, Zoom, Teams, OBS ya da oyunda mikrofon (giriş cihazı) olarak \"{0}\" seç.\nDiscord'da Ses ve Görüntü → Gürültü Azaltma ve Yankı Engelleme'yi kapat: telefon bunları zaten yapıyor, iki kez yapılınca ses titrer.",
+                                                    "In Discord, Zoom, Teams, OBS or your game, pick \"{0}\" as the microphone (input device).\nIn Discord's Voice & Video settings turn off Noise Suppression and Echo Cancellation: the phone already does them, and doing them twice makes the voice warble."), mic);
             else
                 lblOutHint.Text = cfg.Monitor
                     ? L.T("Bu bir hoparlör: sesi sadece sen duyarsın, Discord gibi programlara gitmez.", "This is a speaker: only you hear the audio; it doesn't reach apps like Discord.")
@@ -875,6 +899,7 @@ namespace BrokenMicrophone
                 btnDriver.Text = L.T("Sanal mikrofona gönder", "Send to virtual mic");
             }
             else lblVirt.Text = L.T("Kurulu ve seçili. ✓", "Installed and selected. ✓");
+            if (renameMsg != null) lblVirt.Text += "\n" + renameMsg;
             btnDriver.Invalidate();
 
             // Ayarlar sekmesi
@@ -893,6 +918,16 @@ namespace BrokenMicrophone
             string sig = title + "|" + sub + "|" + alertCount + "|" + alertText[0].Text + alertText[1].Text + alertText[2].Text + alertText[3].Text + "|" +
                          lblOutHint.Text + lblVirt.Text + lblFw.Text + list.Items.Count;
             if (sig != lastSig) { lastSig = sig; DoLayout(); }
+        }
+
+        void RenameMic()
+        {
+            var ep = MicName.Find();
+            if (ep == null) return;
+            string err = MicName.Rename(ep, txtMicName.Box.Text);
+            micEp = MicName.Find();
+            renameMsg = err ?? string.Format(L.T("Adı \"{0}\" oldu. Discord'u yeniden başlatınca yeni adı görür.", "Renamed to \"{0}\". Restart Discord to see the new name."), micEp != null ? micEp.Name : "");
+            UpdateUi();
         }
 
         void FixOutput()
@@ -919,7 +954,17 @@ namespace BrokenMicrophone
             if (a != null && a.Sending) lv = a.Peak;
             meter.Muted = meter2.Muted = a != null && a.Muted;
             if (tab == TabMic) { meter.Push(lv); orb.Push(lv); }
-            if (tab == TabAudio) meter2.Push(lv);
+            if (tab == TabAudio)
+            {
+                meter2.Push(lv);
+                if (slow % 6 == 0)
+                {
+                    string d;
+                    lock (audioLock)
+                        d = player == null ? " " : string.Format(L.T("Tampon {0} ms (hedef {1}) · kesinti {2}", "Buffer {0} ms (target {1}) · dropouts {2}"), player.BufferedMs, player.TargetMs, player.Underruns);
+                    if (lblDiag.Text != d) lblDiag.Text = d;
+                }
+            }
             if (++slow % 6 == 0)
             {
                 // bağlantı olayı pencere hazır olmadan geldiyse kaçmasın
@@ -974,6 +1019,7 @@ namespace BrokenMicrophone
         void ShowDriverHelp()
         {
             using (var d = new DriverDialog()) d.ShowDialog(this);
+            micEp = MicName.Find();
             // kurulumdan sonra cihaz listesi tazelenir
             outputs = Player.Devices();
             output = PickOutput();

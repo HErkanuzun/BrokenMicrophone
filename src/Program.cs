@@ -18,6 +18,13 @@ namespace BrokenMicrophone
         [STAThread]
         static void Main(string[] args)
         {
+            // sanal mikrofonun adını değiştirmek için yönetici olarak açılan yardımcı kopya
+            if (args.Length >= 3 && args[0] == "--rename-mic")
+            {
+                Environment.Exit(MicName.RunElevated(args[1], args[2]));
+                return;
+            }
+
             // Kurulum paketi dosyaları değiştirmeden önce çalışan kopyayı düzgünce kapatır
             if (Array.IndexOf(args, "--exit") >= 0)
             {

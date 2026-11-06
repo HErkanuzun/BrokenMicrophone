@@ -10,10 +10,13 @@ All notable changes to Broken Microphone. The format follows [Keep a Changelog](
 - The firewall permission now covers every network type (also "Public") but only for devices on your local network (`remoteip=localsubnet`). Before, it only covered private networks, so phones couldn't connect when Windows had marked the network as Public.
 
 ### Fixed
+- Choppy, warbling audio in Discord through the virtual microphone. The player now keeps 60 ms queued at the sound device (was 40 ms), its jitter buffer grows when Wi-Fi is unsteady and shrinks again when it's calm, and it corrects the small clock difference between phone and PC by playing up to 1.5 % faster or slower instead of skipping chunks. If audio still runs out it fades out and back in, without clicks. The Audio page shows the buffer and dropout count.
 - A saved window position taller than the screen is moved back inside it, so the tab bar is never hidden behind the taskbar.
 - The last line of text in dialogs is no longer cut off.
 
 ### Added
+- Rename the virtual microphone: on the Audio page type a name (default "Broken Mic") and press Rename. Discord, Zoom and games then show e.g. "Broken Mic (VB-Audio Virtual Cable)". It's the same as Windows' own rename in Sound settings; if Windows requires it, it asks for administrator rights.
+- Tip on the Audio page to turn off Discord's own noise suppression and echo cancellation (the phone already does them).
 - The window checks Windows Firewall by itself (no admin rights needed to check). If the phone would be blocked, the Microphone page says so and **Allow** fixes it in one click (Windows asks for administrator rights). It also removes block rules Windows may have added for the program.
 
 ## [1.2.1] - 2026-11-06
