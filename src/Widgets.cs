@@ -29,10 +29,9 @@ namespace BrokenMicrophone
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            var g = Theme.Prep(e, BackColor);
+            var g = Theme.Prep(e, this);
             var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Theme.Fill(g, r, Theme.P(14), Theme.Card);
-            Theme.Stroke(g, r, Theme.P(14), Theme.Border, 1);
+            Glass.Card(g, r, Theme.P(22), Color.Empty);
 
             float pad = Theme.P(18), capH = Caption == "" ? 0 : Font.Height + Theme.P(14);
             float side = Math.Min(Width - pad * 2, Height - pad * 2 - capH);
@@ -77,10 +76,10 @@ namespace BrokenMicrophone
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            var g = Theme.Prep(e, BackColor);
+            var g = Theme.Prep(e, this);
             float h = Height, rad = h / 2f;
             var r = new RectangleF(0, 0, Width - 1, h - 1);
-            Theme.Fill(g, r, rad, Theme.Field);
+            Theme.Fill(g, r, rad, Color.FromArgb(30, 255, 255, 255));
             // dB'ye yakın görünüm: kısık sesler de görünsün
             float shown = level <= 0.0005f ? 0 : (float)Math.Max(0, 1 + Math.Log10(level) / 2.6);
             if (shown > 0.01f)
@@ -90,7 +89,7 @@ namespace BrokenMicrophone
             }
             float hs = hold <= 0.0005f ? 0 : (float)Math.Max(0, 1 + Math.Log10(hold) / 2.6);
             if (hs > 0.02f)
-                using (var p = new Pen(Theme.Mix(Theme.Text, Theme.Field, 0.4f), Theme.P(2)))
+                using (var p = new Pen(Color.FromArgb(150, Theme.Text), Theme.P(2)))
                     g.DrawLine(p, (Width - 1) * hs - Theme.P(2), Theme.P(2), (Width - 1) * hs - Theme.P(2), h - Theme.P(3));
         }
     }
@@ -129,10 +128,9 @@ namespace BrokenMicrophone
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            var g = Theme.Prep(e, BackColor);
+            var g = Theme.Prep(e, this);
             var all = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-            Theme.Fill(g, all, Theme.P(10), Theme.Card);
-            Theme.Stroke(g, all, Theme.P(10), Theme.Border, 1);
+            Glass.Card(g, all, Theme.P(18), Color.Empty);
             if (Items.Count == 0)
             {
                 Theme.Draw(g, L.T("Henüz bağlı cihaz yok", "No device connected yet"), Font, new RectangleF(Theme.P(16), 0, Width - Theme.P(32), RowH), Theme.Sub,
@@ -146,7 +144,7 @@ namespace BrokenMicrophone
                     var c = Items[i];
                     var row = new RectangleF(Theme.P(4), i * RowH + Theme.P(4), Width - Theme.P(9), RowH - Theme.P(7));
                     bool active = c.Id == ActiveId;
-                    if (active || i == hoverRow) Theme.Fill(g, row, Theme.P(8), active ? Theme.Mix(Theme.Card, Theme.Accent, 0.12f) : Theme.FieldHover);
+                    if (active || i == hoverRow) Theme.Fill(g, row, Theme.P(14), active ? Color.FromArgb(40, Theme.Accent) : Color.FromArgb(18, 255, 255, 255));
                     Color dot = c.Muted ? Theme.Danger : c.Sending ? Theme.Ok : Theme.Sub;
                     float d = Theme.P(10), cy = row.Y + row.Height / 2f;
                     using (var b = new SolidBrush(dot)) g.FillEllipse(b, row.X + Theme.P(12), cy - d / 2, d, d);

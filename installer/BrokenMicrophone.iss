@@ -2,7 +2,7 @@
 ; Derleme: paketle.bat  (ya da: ISCC.exe /DAppVersion=1.0 installer\BrokenMicrophone.iss, önce build.bat)
 ;
 ; - Program normal kullanıcı olarak çalışır. Kurulum yönetici izni ister: Program Files'a kurar ve telefonun bağlanabilmesi için
-;   Windows güvenlik duvarına sadece bu programa, sadece özel ağlarda gelen bağlantı izni ekler (kaldırınca silinir).
+;   Windows güvenlik duvarına sadece bu programa, sadece yerel ağdan gelen bağlantı izni ekler (kaldırınca silinir).
 ; - Program kuruluysa aynı yere üzerine kurar (güncelleme); çalışan kopya önce düzgünce kapatılır.
 ; - Windows "Uygulamalar" listesinde sürümüyle görünür. Kaldırırken ayarların da silinip silinmeyeceği sorulur.
 
@@ -75,9 +75,9 @@ Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
 [Run]
-; telefonun bağlanabilmesi için: sadece bu program, sadece özel ve etki alanı ağları
+; telefonun bağlanabilmesi için: sadece bu program, sadece yerel ağdaki cihazlar (ağ "Ortak" olsa da)
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName}"""; Flags: runhidden; StatusMsg: "{cm:Firewall}"
-Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#AppName}"" dir=in action=allow program=""{app}\{#AppExe}"" enable=yes profile=private,domain protocol=TCP"; Flags: runhidden; StatusMsg: "{cm:Firewall}"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#AppName}"" dir=in action=allow program=""{app}\{#AppExe}"" enable=yes profile=any remoteip=localsubnet protocol=TCP"; Flags: runhidden; StatusMsg: "{cm:Firewall}"
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]

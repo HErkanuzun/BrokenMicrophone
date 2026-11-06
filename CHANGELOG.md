@@ -2,6 +2,15 @@
 
 All notable changes to Broken Microphone. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+- New Windows window in the same style as the Android app: a bottom tab bar with four pages (Microphone, Connect, Audio, Settings), large titles and glass cards over a soft colour background. No more single long page.
+- The firewall permission now covers every network type (also "Public") but only for devices on your local network (`remoteip=localsubnet`). Before, it only covered private networks, so phones couldn't connect when Windows had marked the network as Public.
+
+### Added
+- The window checks Windows Firewall by itself (no admin rights needed to check). If the phone would be blocked, the Microphone page says so and **Allow** fixes it in one click (Windows asks for administrator rights). It also removes block rules Windows may have added for the program.
+
 ## [1.2.1] - 2026-11-06
 
 ### Changed

@@ -7,10 +7,15 @@ using System.Windows.Forms;
 
 namespace BrokenMicrophone
 {
-    class MainForm : Form
+    /// <summary>
+    /// Ana pencere. Telefon uygulamasıyla aynı düzen: altta sekme çubuğu (Mikrofon · Bağlan · Ses · Ayarlar),
+    /// her sekme ayrı sayfa, büyük başlık, cam kartlar.
+    /// </summary>
+    class MainForm : Form, ISurface
     {
         readonly Settings cfg;
-        readonly BufferedPanel page = new BufferedPanel();
+        readonly GlassPage page = new GlassPage();
+        readonly TabBar bar = new TabBar();
         readonly System.Windows.Forms.Timer tick = new System.Windows.Forms.Timer();
         public bool ExitRequested;
 
@@ -25,35 +30,69 @@ namespace BrokenMicrophone
         OutputDevice output;            // seçili çıkış
         string playerError;
 
-        PictureBox logo;
-        Label lblTitle, lblSub, secPhone, secOut, secDevices, lblSteps, lblOutHint, lblFoot;
-        Seg segLang;
-        FlatButton btnAbout, btnCopy, btnHelp, btnDriver, btnAndroid;
-        StatusBox info;
-        QrView qr;
-        DarkCombo cmbAddress, cmbOutput;
+        // güvenlik duvarı (arka planda okunur)
+        volatile FwState fw = FwState.Unknown;
+        int fwChecking;
+        string fwMessage;
+
+        // sekmeler
+        const int TabMic = 0, TabConnect = 1, TabAudio = 2, TabSettings = 3;
+        int tab;
+        readonly List<Control>[] groups = { new List<Control>(), new List<Control>(), new List<Control>(), new List<Control>() };
+        int building = -1;
+        readonly Label[] titles = new Label[4], subs = new Label[4];
+
+        // Mikrofon
+        MicOrb orb;
+        Label lblState, lblState2, secDevices;
         LevelMeter meter;
         ClientList list;
+        FlatButton btnGoConnect;
+        readonly Label[] alertText = new Label[4];
+        readonly FlatButton[] alertBtn = new FlatButton[4];
+        readonly Action[] alertAct = new Action[4];
+        int alertCount;
+
+        // Bağlan
+        QrView qr;
+        Picker pickAddress;
+        FlatButton btnCopy, btnHelp, btnAndroid;
+        Label secSteps, lblSteps;
+
+        // Ses
+        Label secOut, lblOutHint, secMon, secVirt, lblVirt;
+        Picker pickOutput;
         Toggle tglMonitor;
+        LevelMeter meter2;
+        FlatButton btnDriver;
+
+        // Ayarlar
+        Label secLang, secNet, lblFw, secAbout, lblApp, lblFoot;
+        Seg segLang;
+        FlatButton btnFw, btnHelp2, btnAbout;
+        PictureBox logo;
 
         public MainForm(Settings cfg)
         {
             this.cfg = cfg;
             Text = AppInfo.Name + " " + AppInfo.Version;
-            BackColor = Theme.Bg;
+            BackColor = Glass.Bg;
             ForeColor = Theme.Text;
             AutoScaleMode = AutoScaleMode.None;
             Icon = Theme.AppIcon(32);
             StartPosition = FormStartPosition.CenterScreen;
             KeyPreview = true;
+            DoubleBuffered = true;
             using (var g = CreateGraphics()) Theme.S = Math.Max(1f, g.DpiX / 96f);
 
             page.Dock = DockStyle.Fill;
-            page.BackColor = Theme.Bg;
-            page.AutoScroll = true;
-            page.Resize += delegate { DoLayout(); };
+            bar.Dock = DockStyle.Bottom;
+            bar.Height = P(84);
             Controls.Add(page);
-            BrokenUi.GlassScroll.Attach(page, Theme.Bg, Theme.Accent);   // beyaz Windows çubuğu yerine koyu cam çubuk
+            Controls.Add(bar);
+            page.Resize += delegate { DoLayout(); };
+            page.Scrolled += delegate { DoLayout(); };
+            bar.Changed += delegate (int i) { ShowTab(i); };
 
             addresses = Net.Addresses();
             outputs = Player.Devices();
@@ -62,6 +101,7 @@ namespace BrokenMicrophone
             StartServer();
             BuildUi();
             InitialSize();
+            CheckFirewall();
 
             tick.Interval = 80;
             tick.Tick += delegate { OnTick(); };
@@ -71,6 +111,10 @@ namespace BrokenMicrophone
         static int P(float v) { return Theme.P(v); }
 
         protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Theme.DarkTitle(this); }
+
+        public void PaintSurface(Graphics g, Rectangle r) { Glass.Backdrop(g, ClientSize, Point.Empty, r); }
+        protected override void OnPaintBackground(PaintEventArgs e) { PaintSurface(e.Graphics, e.ClipRectangle); }
+        protected override void OnResize(EventArgs e) { base.OnResize(e); Invalidate(true); }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
@@ -100,8 +144,8 @@ namespace BrokenMicrophone
         {
             var wa = Screen.FromPoint(Cursor.Position).WorkingArea;
             var frame = SizeFromClientSize(Size.Empty);
-            MinimumSize = SizeFromClientSize(new Size(P(400), P(480)));
-            ClientSize = new Size(Math.Min(P(940), wa.Width - frame.Width), Math.Min(P(740), wa.Height - frame.Height));
+            MinimumSize = SizeFromClientSize(new Size(P(400), P(560)));
+            ClientSize = new Size(Math.Min(P(980), wa.Width - frame.Width), Math.Min(P(780), wa.Height - frame.Height));
             try
             {
                 var p = cfg.Window.Split(',');
@@ -142,7 +186,7 @@ namespace BrokenMicrophone
                 lock (audioLock) if (activeId == c.Id) activeId = 0;
                 SafeUi(delegate { OnClientsChanged(); });
             };
-            server.Changed += delegate (Client c) { SafeUi(delegate { list.Invalidate(); }); };
+            server.Changed += delegate (Client c) { SafeUi(delegate { if (list != null) list.Invalidate(); }); };
             server.Audio += OnAudio;
             // port doluysa sıradaki birkaç port denenir
             for (int i = 0; i < 10; i++)
@@ -228,6 +272,7 @@ namespace BrokenMicrophone
         }
 
         bool HasVirtual { get { foreach (var d in outputs) if (d.Virtual) return true; return false; } }
+        bool WrongOut { get { return HasVirtual && (output == null || !output.Virtual); } }
 
         string Url
         {
@@ -248,11 +293,36 @@ namespace BrokenMicrophone
             }
         }
 
+        int Port { get { return server != null ? server.Port : cfg.Port; } }
+
+        // ------------------------------------------------------------------ güvenlik duvarı
+        void CheckFirewall()
+        {
+            if (server == null || Interlocked.Exchange(ref fwChecking, 1) == 1) return;
+            int port = server.Port;
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                var s = Firewall.Check(port);
+                fw = s;
+                Interlocked.Exchange(ref fwChecking, 0);
+                SafeUi(UpdateUi);
+            });
+        }
+
+        void AllowFirewall()
+        {
+            fwMessage = Firewall.Allow(Port);
+            if (fwMessage == null) fw = FwState.Unknown;
+            UpdateUi();
+            CheckFirewall();
+        }
+
         // ------------------------------------------------------------------ arayüz
         T Add<T>(T c) where T : Control
         {
-            if (c.Font == DefaultFont || !(c is Label)) c.Font = Font;
+            if (!(c is Label)) c.Font = Font;
             page.Controls.Add(c);
+            if (building >= 0) groups[building].Add(c);
             return c;
         }
 
@@ -268,95 +338,45 @@ namespace BrokenMicrophone
             var l = new Label();
             l.Text = text;
             l.ForeColor = color;
-            l.BackColor = Theme.Bg;
+            l.BackColor = Color.Transparent;
             l.Font = new Font(Font.FontFamily, size, style);
             l.AutoSize = true;
-            page.Controls.Add(l);
-            return l;
+            l.UseMnemonic = false;
+            return Add(l);
         }
 
         Label Section(string text) { return Text2(L.Upper(text), Theme.Sub, 8f, FontStyle.Bold); }
+        Label Title(string text) { return Text2(text, Theme.Text, 22f, FontStyle.Bold); }
+        Label Sub(string text) { return Text2(text, Theme.Sub, 10f, FontStyle.Regular); }
 
         void BuildUi()
         {
             SuspendLayout();
             Font = new Font("Segoe UI", 9.5f);
+            for (int i = 0; i < 4; i++) { groups[i].Clear(); subs[i] = null; }
 
-            logo = new PictureBox();
-            logo.SizeMode = PictureBoxSizeMode.Zoom;
-            logo.BackColor = Theme.Bg;
-            logo.Image = Theme.Logo();
-            page.Controls.Add(logo);
+            bar.Font = Font;
+            bar.Labels = new[] { L.T("Mikrofon", "Microphone"), L.T("Bağlan", "Connect"), L.T("Ses", "Audio"), L.T("Ayarlar", "Settings") };
+            bar.IconKinds = new[] { Icons.Mic, Icons.Scan, Icons.Tune, Icons.Gear };
+            bar.Selected = tab;
+            bar.Invalidate();
 
-            lblTitle = Text2(AppInfo.Name, Theme.Text, 15f, FontStyle.Bold);
-            lblSub = Text2(L.T("Telefonunu ya da tabletini bilgisayarın mikrofonu yap.", "Use your phone or tablet as the computer's microphone."), Theme.Sub, 9.5f, FontStyle.Regular);
-
-            segLang = Add(new Seg());
-            segLang.Items = new[] { "TR", "EN" };
-            segLang.Font = new Font("Segoe UI", 8.5f);
-            segLang.Selected = Math.Max(0, Array.IndexOf(L.Codes, L.Lang));
-            segLang.Changed += delegate (int i)
-            {
-                cfg.Lang = L.Codes[i];
-                cfg.Save();
-                L.Set(cfg.Lang);
-                BeginInvoke((MethodInvoker)RebuildUi);
-            };
-            btnAbout = Btn(L.T("Hakkında", "About"), BtnKind.Ghost, delegate { using (var a = new AboutDialog()) a.ShowDialog(this); });
-
-            info = Add(new StatusBox());
-            btnDriver = Btn(L.T("Sanal mikrofonu kur…", "Install a virtual microphone…"), BtnKind.Primary, delegate
-            {
-                if (!HasVirtual) { ShowDriverHelp(); return; }
-                foreach (OutputDevice d in cmbOutput.Items) if (d.Virtual) { cmbOutput.SelectedItem = d; break; }   // seçim olayı kaydeder ve yeniler
-            });
-
-            // sol: telefon
-            secPhone = Section(L.T("Telefonu bağla", "Connect your phone"));
-            qr = Add(new QrView());
-            qr.Font = new Font(Font.FontFamily, 9f);
-            cmbAddress = Add(new DarkCombo());
-            foreach (var a in addresses) cmbAddress.Items.Add(a);
-            var sel = SelectedAddress;
-            if (sel != null) cmbAddress.SelectedItem = sel;
-            cmbAddress.SelectedIndexChanged += delegate
-            {
-                var a = cmbAddress.SelectedItem as LocalAddress;
-                if (a == null) return;
-                cfg.Address = a.Ip.ToString();
-                cfg.Save();
-                UpdateUrl();
-            };
-            btnCopy = Btn(L.T("Adresi kopyala", "Copy address"), BtnKind.Secondary, delegate
-            {
-                try { Clipboard.SetText(Url); btnCopy.Text = L.T("Kopyalandı", "Copied"); } catch { }
-            });
-            btnHelp = Btn(L.T("Bağlanamıyor musun?", "Can't connect?"), BtnKind.Ghost, delegate { ShowConnectHelp(); });
-            btnAndroid = Btn(L.T("Android uygulaması", "Android app"), BtnKind.Secondary, delegate { ShowAndroid(); });
-            lblSteps = Text2(L.T(
-                "1. Telefon bilgisayarla aynı Wi-Fi ağında olsun.\n2. Telefonun kamerasıyla QR kodu okut.\n3. \"Bağlantı gizli değil\" uyarısında Ayrıntılar → Siteyi ziyaret et (sadece ilk seferde).\n4. Mikrofon düğmesine bas ve izin ver.",
-                "1. Put the phone on the same Wi-Fi as the computer.\n2. Scan the QR code with the phone's camera.\n3. At the \"connection is not private\" warning choose Details → Visit website (first time only).\n4. Tap the microphone button and allow access."),
-                Theme.Sub, 9f, FontStyle.Regular);
-
-            // sağ: ses
-            secOut = Section(L.T("Ses nereye gitsin", "Where the audio goes"));
-            cmbOutput = Add(new DarkCombo());
-            FillOutputs();
-            cmbOutput.SelectedIndexChanged += delegate
-            {
-                var d = cmbOutput.SelectedItem as OutputDevice;
-                output = d != null && d.Id >= 0 ? d : null;
-                cfg.Output = output == null ? "" : output.Name;
-                cfg.Save();
-                ResetPlayers();
-                UpdateUi();
-            };
-            lblOutHint = Text2("", Theme.Sub, 9f, FontStyle.Regular);
+            // ---- Mikrofon
+            building = TabMic;
+            titles[TabMic] = Title(L.T("Mikrofon", "Microphone"));
+            orb = Add(new MicOrb());
+            lblState = Text2("", Theme.Text, 15f, FontStyle.Bold);
+            lblState.TextAlign = ContentAlignment.TopCenter;
+            lblState2 = Text2("", Theme.Sub, 10f, FontStyle.Regular);
+            lblState2.TextAlign = ContentAlignment.TopCenter;
             meter = Add(new LevelMeter());
-            tglMonitor = Add(new Toggle(L.T("Kendi sesimi hoparlörden duy", "Hear myself on the speakers")));
-            tglMonitor.Checked = cfg.Monitor;
-            tglMonitor.Changed += delegate (bool on) { cfg.Monitor = on; cfg.Save(); UpdateUi(); };
-
+            btnGoConnect = Btn(L.T("Telefonu bağla", "Connect a phone"), BtnKind.Primary, delegate { ShowTab(TabConnect); });
+            for (int i = 0; i < alertText.Length; i++)
+            {
+                int k = i;
+                alertText[i] = Text2("", Theme.Text, 9.5f, FontStyle.Regular);
+                alertBtn[i] = Btn("", BtnKind.Primary, delegate { if (alertAct[k] != null) alertAct[k](); });
+            }
             secDevices = Section(L.T("Bağlı cihazlar", "Connected devices"));
             list = Add(new ClientList());
             list.ActiveId = activeId;
@@ -368,27 +388,117 @@ namespace BrokenMicrophone
             };
             if (server != null) list.Items = server.Clients;
 
+            // ---- Bağlan
+            building = TabConnect;
+            titles[TabConnect] = Title(L.T("Telefonu bağla", "Connect your phone"));
+            subs[TabConnect] = Sub(L.T("Telefonda Broken Microphone uygulamasıyla ya da kamerayla bu QR kodu okut.",
+                                       "Scan this QR code with the Broken Microphone app or the phone's camera."));
+            qr = Add(new QrView());
+            qr.Font = new Font(Font.FontFamily, 9f);
+            pickAddress = Add(new Picker());
+            FillAddresses();
+            pickAddress.Changed += delegate
+            {
+                var a = pickAddress.SelectedItem as LocalAddress;
+                if (a == null) return;
+                cfg.Address = a.Ip.ToString();
+                cfg.Save();
+                UpdateUrl();
+            };
+            btnCopy = Btn(L.T("Adresi kopyala", "Copy address"), BtnKind.Secondary, delegate
+            {
+                try { Clipboard.SetText(Url); btnCopy.Text = L.T("Kopyalandı", "Copied"); } catch { }
+            });
+            btnAndroid = Btn(L.T("Android uygulaması", "Android app"), BtnKind.Secondary, delegate { ShowAndroid(); });
+            btnHelp = Btn(L.T("Bağlanamıyor musun?", "Can't connect?"), BtnKind.Ghost, delegate { ShowConnectHelp(); });
+            secSteps = Section(L.T("Nasıl bağlanır", "How to connect"));
+            lblSteps = Text2(L.T(
+                "1. Telefon bilgisayarla aynı Wi-Fi ağında olsun.\n2. Broken Microphone uygulamasında QR Okut'a bas (ya da telefonun kamerasıyla okut).\n3. Tarayıcıda açtıysan \"Bağlantı gizli değil\" uyarısında Ayrıntılar → Siteyi ziyaret et (sadece ilk seferde).\n4. Mikrofon düğmesine bas ve izin ver.",
+                "1. Put the phone on the same Wi-Fi as the computer.\n2. In the Broken Microphone app tap Scan (or use the phone's camera).\n3. In a browser, at the \"connection is not private\" warning choose Details → Visit website (first time only).\n4. Tap the microphone button and allow access."),
+                Theme.Text, 9.5f, FontStyle.Regular);
+
+            // ---- Ses
+            building = TabAudio;
+            titles[TabAudio] = Title(L.T("Ses", "Audio"));
+            subs[TabAudio] = Sub(L.T("Telefondan gelen ses nereye gitsin.", "Where the audio from the phone goes."));
+            secOut = Section(L.T("Ses nereye gitsin", "Where the audio goes"));
+            pickOutput = Add(new Picker());
+            FillOutputs();
+            pickOutput.Changed += delegate
+            {
+                var d = pickOutput.SelectedItem as OutputDevice;
+                output = d != null && d.Id >= 0 ? d : null;
+                cfg.Output = output == null ? "" : output.Name;
+                cfg.Save();
+                ResetPlayers();
+                UpdateUi();
+            };
+            lblOutHint = Text2("", Theme.Sub, 9f, FontStyle.Regular);
+            secMon = Section(L.T("Dinleme", "Listening"));
+            tglMonitor = Add(new Toggle(L.T("Kendi sesimi hoparlörden duy", "Hear myself on the speakers")));
+            tglMonitor.Checked = cfg.Monitor;
+            tglMonitor.Changed += delegate (bool on) { cfg.Monitor = on; cfg.Save(); UpdateUi(); };
+            meter2 = Add(new LevelMeter());
+            secVirt = Section(L.T("Sanal mikrofon", "Virtual microphone"));
+            lblVirt = Text2("", Theme.Text, 9.5f, FontStyle.Regular);
+            btnDriver = Btn("", BtnKind.Primary, delegate { FixOutput(); });
+
+            // ---- Ayarlar
+            building = TabSettings;
+            titles[TabSettings] = Title(L.T("Ayarlar", "Settings"));
+            secLang = Section(L.T("Dil", "Language"));
+            segLang = Add(new Seg());
+            segLang.Items = new[] { "Türkçe", "English" };
+            segLang.Selected = Math.Max(0, Array.IndexOf(L.Codes, L.Lang));
+            segLang.Changed += delegate (int i)
+            {
+                cfg.Lang = L.Codes[i];
+                cfg.Save();
+                L.Set(cfg.Lang);
+                BeginInvoke((MethodInvoker)RebuildUi);
+            };
+            secNet = Section(L.T("Bağlantı", "Connection"));
+            lblFw = Text2("", Theme.Text, 9.5f, FontStyle.Regular);
+            btnFw = Btn("", BtnKind.Secondary, delegate { AllowFirewall(); });
+            btnHelp2 = Btn(L.T("Bağlanamıyor musun?", "Can't connect?"), BtnKind.Ghost, delegate { ShowConnectHelp(); });
+            secAbout = Section(L.T("Hakkında", "About"));
+            logo = new PictureBox();
+            logo.SizeMode = PictureBoxSizeMode.Zoom;
+            logo.BackColor = Color.Transparent;
+            logo.Image = Theme.Logo();
+            Add(logo);
+            lblApp = Text2(AppInfo.Name + "\n" + L.T("Sürüm ", "Version ") + AppInfo.Version, Theme.Text, 10.5f, FontStyle.Bold);
             lblFoot = Text2(L.T("Ses sadece yerel ağda, bilgisayarla telefon arasında gider; internete çıkmaz. QR koddaki anahtarı bilmeyen kimse bağlanamaz.",
                                 "Audio only travels between the phone and the computer on your local network; nothing goes to the internet. Nobody can connect without the key in the QR code."),
-                            Theme.Sub, 8.5f, FontStyle.Regular);
+                            Theme.Sub, 9f, FontStyle.Regular);
+            btnAbout = Btn(L.T("Lisans ve ayrıntılar", "License and details"), BtnKind.Secondary, delegate { using (var a = new AboutDialog()) a.ShowDialog(this); });
+            building = -1;
 
             UpdateUrl();
             UpdateUi();
             ResumeLayout();
-            DoLayout();
+            ShowTab(tab);
         }
 
         void FillOutputs()
         {
-            cmbOutput.Items.Clear();
+            pickOutput.Items.Clear();
             var def = new OutputDevice();
             def.Id = -1;
             def.Name = L.T("Windows'un varsayılan hoparlörü", "Windows default speakers");
-            cmbOutput.Items.Add(def);
-            foreach (var d in outputs) cmbOutput.Items.Add(d);
+            pickOutput.Items.Add(def);
+            foreach (var d in outputs) pickOutput.Items.Add(d);
             object pick = def;
-            foreach (OutputDevice d in cmbOutput.Items) if (output != null && d.Id == output.Id && d.Name == output.Name) pick = d;
-            cmbOutput.SelectedItem = pick;
+            foreach (OutputDevice d in pickOutput.Items) if (output != null && d.Id == output.Id && d.Name == output.Name) pick = d;
+            pickOutput.SelectedItem = pick;
+        }
+
+        void FillAddresses()
+        {
+            pickAddress.Items.Clear();
+            foreach (var a in addresses) pickAddress.Items.Add(a);
+            var sel = SelectedAddress;
+            pickAddress.SelectedItem = sel;
         }
 
         void RebuildUi()
@@ -402,98 +512,217 @@ namespace BrokenMicrophone
             ResumeLayout();
         }
 
-        // Duyarlı düzen: içerik en fazla P(1040) genişlikte ve ortada durur; geniş pencerede iki sütun,
-        // dar pencerede tek sütun. Pencere içerikten uzunsa dikeyde de ortalanır, kısaysa kaydırılır.
-        void DoLayout()
+        void ShowTab(int i)
         {
-            if (lblFoot == null) return;
-            int W = page.ClientSize.Width, H = page.ClientSize.Height;
-            int pad = W < P(560) ? P(16) : P(28);
-            int w = Math.Min(P(1040), W - pad * 2);
-            int x = (W - w) / 2;
-
-            int height = Place(x, 0, w) ;                       // önce ölç
-            int top = height + pad * 2 <= H ? (H - height) / 2 : pad - page.VerticalScroll.Value;
-            Place(x, top, w);
-            page.AutoScrollMinSize = height + pad * 2 <= H ? Size.Empty : new Size(0, height + pad * 2);
-            page.Invalidate();
+            tab = i;
+            bar.Selected = i;
+            page.SuspendLayout();
+            for (int g = 0; g < groups.Length; g++)
+                foreach (var c in groups[g]) c.Visible = g == i;
+            page.ScrollY = 0;
+            page.ResumeLayout(false);
+            DoLayout();
         }
 
-        /// <summary>Denetimleri yerleştirir, kapladığı yüksekliği döndürür.</summary>
-        int Place(int x, int y0, int w)
+        // ------------------------------------------------------------------ düzen
+        // Her sekme ortada, en fazla belli genişlikte bir sütun. Uzun içerik kaydırılır (zemin sabit kalır).
+        int X, W, Y, pad;
+
+        void DoLayout()
         {
-            int y = y0;
-            bool narrow = w < P(600);
+            if (titles[TabSettings] == null) return;
+            page.SuspendLayout();
+            for (int pass = 0; pass < 2; pass++)
+            {
+                page.Cards.Clear();
+                int PW = page.ClientSize.Width;
+                pad = PW < P(560) ? P(16) : P(28);
+                W = Math.Min(tab == TabConnect ? P(900) : P(620), PW - pad * 2);
+                X = (PW - W) / 2;
+                Y = pad + P(6) - page.ScrollY;
+                titles[tab].Location = new Point(X, Y);
+                Y = titles[tab].Bottom + P(2);
+                if (subs[tab] != null)
+                {
+                    subs[tab].MaximumSize = new Size(W, 0);
+                    subs[tab].Location = new Point(X + P(1), Y);
+                    Y = subs[tab].Bottom;
+                }
+                Y += P(20);
+                switch (tab)
+                {
+                    case TabMic: PlaceMic(); break;
+                    case TabConnect: PlaceConnect(); break;
+                    case TabAudio: PlaceAudio(); break;
+                    default: PlaceSettings(); break;
+                }
+                page.ContentH = Y + page.ScrollY + pad;
+                if (page.ScrollY <= page.MaxScroll) break;
+                page.ScrollY = page.MaxScroll;
+            }
+            page.ResumeLayout(false);
+            page.Invalidate(true);
+        }
 
-            // başlık: dar pencerede dil ve Hakkında alt satıra iner
-            logo.SetBounds(x, y, P(48), P(48));
-            lblTitle.Location = new Point(x + P(62), y - P(1));
-            lblSub.Location = new Point(x + P(64), y + P(30));
-            int by = narrow ? y + P(62) : y + P(6);
-            btnAbout.SetBounds(x + w - P(90), by, P(90), P(32));
-            segLang.SetBounds(x + w - P(90) - P(8) - P(96), by, P(96), P(32));
-            y = narrow ? by + P(48) : y + P(70);
+        void Card(int x, int y, int w, int h, Color tint) { page.Cards.Add(new GlassCard(new Rectangle(x, y, w, h), tint)); }
 
-            // bilgi şeridi: dar pencerede düğme altına iner
-            bool driverBelow = btnDriver.Visible && w < P(720);
-            int infoW = btnDriver.Visible && !driverBelow ? w - P(250) : w;
-            info.SetBounds(x, y, infoW, Math.Max(P(46), info.Measure(infoW)));
+        static int Wrap(Label l, int x, int y, int w)
+        {
+            l.MaximumSize = new Size(Math.Max(1, w), 0);
+            l.Location = new Point(x, y);
+            return y + l.Height;
+        }
+
+        void PlaceMic()
+        {
+            int ow = Math.Min(W, P(210));
+            orb.SetBounds(X + (W - ow) / 2, Y, ow, ow);
+            Y = orb.Bottom + P(4);
+            lblState.MaximumSize = new Size(W, 0);
+            lblState.Location = new Point(X + (W - lblState.Width) / 2, Y);
+            Y = lblState.Bottom + P(4);
+            lblState2.MaximumSize = new Size(Math.Min(W, P(470)), 0);
+            lblState2.Location = new Point(X + (W - lblState2.Width) / 2, Y);
+            Y = lblState2.Bottom + P(16);
+            int mw = Math.Min(W, P(300));
+            meter.SetBounds(X + (W - mw) / 2, Y, mw, P(8));
+            Y = meter.Bottom + P(24);
+
+            bool noPhone = list.Items.Count == 0 && server != null && addresses.Count > 0;
+            btnGoConnect.Visible = noPhone;
+            if (noPhone)
+            {
+                int bw = Math.Min(W, P(240));
+                btnGoConnect.SetBounds(X + (W - bw) / 2, Y, bw, P(46));
+                Y = btnGoConnect.Bottom + P(24);
+            }
+
+            int cp = P(18);
+            for (int i = 0; i < alertText.Length; i++)
+            {
+                bool show = i < alertCount;
+                alertText[i].Visible = show;
+                alertBtn[i].Visible = show && alertBtn[i].Text != "";
+                if (!show) continue;
+                bool side = W >= P(520) && alertBtn[i].Visible;
+                int bw = Math.Min(W - cp * 2, P(200));
+                int top = Y;
+                int ty = Wrap(alertText[i], X + cp, Y + cp, W - cp * 2 - (side ? bw + P(14) : 0));
+                int bottom;
+                if (!alertBtn[i].Visible) bottom = ty;
+                else if (side)
+                {
+                    int h = Math.Max(ty - (Y + cp), P(42));
+                    alertBtn[i].SetBounds(X + W - cp - bw, Y + cp + (h - P(42)) / 2, bw, P(42));
+                    alertText[i].Top = Y + cp + (h - alertText[i].Height) / 2;
+                    bottom = Y + cp + h;
+                }
+                else
+                {
+                    alertBtn[i].SetBounds(X + cp, ty + P(12), W - cp * 2, P(42));
+                    bottom = alertBtn[i].Bottom;
+                }
+                Card(X, top, W, bottom + cp - top, Theme.Warn);
+                Y = bottom + cp + P(12);
+            }
+            if (alertCount > 0) Y += P(12);
+
+            secDevices.Location = new Point(X + P(6), Y);
+            Y = secDevices.Bottom + P(8);
+            list.SetBounds(X, Y, W, list.Measure());
+            Y = list.Bottom;
+        }
+
+        void PlaceConnect()
+        {
+            bool wide = W >= P(720);
+            int gap = P(24), cp = P(18);
+            int qw = wide ? P(340) : Math.Min(W, P(360));
+            int qx = wide ? X : X + (W - qw) / 2;
+            qr.SetBounds(qx, Y, qw, qw + P(26));
+            int leftBottom = qr.Bottom;
+
+            int rx = wide ? X + qw + gap : X, rw = wide ? W - qw - gap : W;
+            int y = wide ? Y : qr.Bottom + P(16);
+            int top = y;
+            y += cp;
+            pickAddress.Visible = addresses.Count > 1;
+            if (pickAddress.Visible) { pickAddress.SetBounds(rx + cp, y, rw - cp * 2, P(42)); y = pickAddress.Bottom + P(10); }
+            int half = (rw - cp * 2 - P(10)) / 2;
+            btnCopy.SetBounds(rx + cp, y, half, P(42));
+            btnAndroid.SetBounds(rx + cp + half + P(10), y, rw - cp * 2 - half - P(10), P(42));
+            y = btnCopy.Bottom + P(8);
+            btnHelp.SetBounds(rx + cp, y, rw - cp * 2, P(36));
+            y = btnHelp.Bottom + cp;
+            Card(rx, top, rw, y - top, Color.Empty);
+
+            y += P(14);
+            top = y;
+            secSteps.Location = new Point(rx + cp, y + cp);
+            y = Wrap(lblSteps, rx + cp, secSteps.Bottom + P(8), rw - cp * 2) + cp;
+            Card(rx, top, rw, y - top, Color.Empty);
+            Y = Math.Max(leftBottom, y);
+        }
+
+        void PlaceAudio()
+        {
+            int cp = P(18);
+            int top = Y;
+            secOut.Location = new Point(X + cp, Y + cp);
+            pickOutput.SetBounds(X + cp, secOut.Bottom + P(8), W - cp * 2, P(42));
+            Y = Wrap(lblOutHint, X + cp + P(2), pickOutput.Bottom + P(10), W - cp * 2) + cp;
+            Card(X, top, W, Y - top, Color.Empty);
+
+            Y += P(14);
+            top = Y;
+            secMon.Location = new Point(X + cp, Y + cp);
+            tglMonitor.SetBounds(X + cp, secMon.Bottom + P(8), W - cp * 2, P(32));
+            meter2.SetBounds(X + cp, tglMonitor.Bottom + P(12), W - cp * 2, P(8));
+            Y = meter2.Bottom + cp;
+            Card(X, top, W, Y - top, Color.Empty);
+
+            Y += P(14);
+            top = Y;
+            secVirt.Location = new Point(X + cp, Y + cp);
+            Y = Wrap(lblVirt, X + cp, secVirt.Bottom + P(8), W - cp * 2);
+            btnDriver.Visible = !HasVirtual || WrongOut;
             if (btnDriver.Visible)
             {
-                if (driverBelow) { btnDriver.SetBounds(x, info.Bottom + P(10), w, P(40)); y = btnDriver.Bottom; }
-                else { btnDriver.SetBounds(x + w - P(238), y + (info.Height - P(40)) / 2, P(238), P(40)); y = info.Bottom; }
+                btnDriver.SetBounds(X + cp, Y + P(12), Math.Min(W - cp * 2, P(280)), P(42));
+                Y = btnDriver.Bottom;
             }
-            else y = info.Bottom;
-            y += P(22);
+            Y += cp;
+            Card(X, top, W, Y - top, HasVirtual && !WrongOut ? Color.Empty : Theme.Warn);
+        }
 
-            bool twoCols = w >= P(760);
-            int gap = P(32);
-            int leftW = twoCols ? Math.Max(P(280), Math.Min(P(360), (w - gap) * 38 / 100)) : w;
-            int top = y;
+        void PlaceSettings()
+        {
+            int cp = P(18);
+            int top = Y;
+            secLang.Location = new Point(X + cp, Y + cp);
+            segLang.SetBounds(X + cp, secLang.Bottom + P(8), Math.Min(W - cp * 2, P(240)), P(38));
+            Y = segLang.Bottom + cp;
+            Card(X, top, W, Y - top, Color.Empty);
 
-            // telefon bölümü (QR)
-            secPhone.Location = new Point(x, y);
-            y += P(24);
-            int qw = Math.Min(leftW, P(340));
-            int qx = twoCols ? x : x + (w - qw) / 2;          // tek sütunda QR ortada
-            qr.SetBounds(qx, y, qw, qw + P(26));
-            y = qr.Bottom + P(10);
-            cmbAddress.Visible = addresses.Count > 1;
-            if (cmbAddress.Visible) { cmbAddress.SetBounds(qx, y, qw, P(30)); y = cmbAddress.Bottom + P(10); }
-            btnCopy.SetBounds(qx, y, (qw - P(8)) / 2, P(36));
-            btnHelp.SetBounds(qx + (qw + P(8)) / 2, y, (qw - P(8)) / 2, P(36));
-            y = btnCopy.Bottom + P(8);
-            btnAndroid.SetBounds(qx, y, qw, P(36));
-            y = btnAndroid.Bottom + P(12);
-            lblSteps.MaximumSize = new Size(qw, 0);
-            lblSteps.Location = new Point(qx, y);
-            int leftBottom = y + lblSteps.Height;
+            Y += P(14);
+            top = Y;
+            secNet.Location = new Point(X + cp, Y + cp);
+            Y = Wrap(lblFw, X + cp, secNet.Bottom + P(8), W - cp * 2) + P(12);
+            int bw = Math.Min((W - cp * 2 - P(10)) / 2, P(230));
+            btnFw.SetBounds(X + cp, Y, bw, P(42));
+            btnHelp2.SetBounds(X + cp + bw + P(10), Y, bw, P(42));
+            Y = btnFw.Bottom + cp;
+            Card(X, top, W, Y - top, fw == FwState.Blocked ? Theme.Warn : Color.Empty);
 
-            // ses bölümü: yanda ya da altta
-            int rx = twoCols ? x + leftW + gap : x;
-            int rw = twoCols ? w - leftW - gap : w;
-            y = twoCols ? top : leftBottom + P(26);
-            secOut.Location = new Point(rx, y);
-            y += P(24);
-            cmbOutput.SetBounds(rx, y, rw, P(30));
-            y = cmbOutput.Bottom + P(8);
-            lblOutHint.MaximumSize = new Size(rw, 0);
-            lblOutHint.Location = new Point(rx, y);
-            y = lblOutHint.Bottom + P(12);
-            meter.SetBounds(rx, y, rw, P(12));
-            y = meter.Bottom + P(12);
-            tglMonitor.SetBounds(rx, y, rw, P(30));
-            tglMonitor.Visible = true;
-            y = tglMonitor.Bottom + P(14);
-            secDevices.Location = new Point(rx, y);
-            y += P(24);
-            list.SetBounds(rx, y, rw, list.Measure());
-            int rightBottom = list.Bottom;
-
-            y = (twoCols ? Math.Max(leftBottom, rightBottom) : rightBottom) + P(24);
-            lblFoot.MaximumSize = new Size(w, 0);
-            lblFoot.Location = new Point(x, y);
-            return y + lblFoot.Height - y0;
+            Y += P(14);
+            top = Y;
+            secAbout.Location = new Point(X + cp, Y + cp);
+            logo.SetBounds(X + cp, secAbout.Bottom + P(10), P(48), P(48));
+            lblApp.Location = new Point(logo.Right + P(12), logo.Top + (logo.Height - lblApp.Height) / 2);
+            Y = Wrap(lblFoot, X + cp, logo.Bottom + P(12), W - cp * 2);
+            btnAbout.SetBounds(X + cp, Y + P(12), Math.Min(W - cp * 2, P(230)), P(42));
+            Y = btnAbout.Bottom + cp;
+            Card(X, top, W, Y - top, Color.Empty);
         }
 
         void UpdateUrl()
@@ -541,77 +770,133 @@ namespace BrokenMicrophone
             }
         }
 
+        void Alert(string text, string button, Action act)
+        {
+            if (alertCount >= alertText.Length) return;
+            alertText[alertCount].Text = text;
+            alertBtn[alertCount].Text = button ?? "";
+            alertAct[alertCount] = act;
+            alertCount++;
+        }
+
+        string lastSig;
+
         void UpdateUi()
         {
-            string s;
-            StatusKind kind;
+            if (lblFoot == null) return;
             var a = Active;
+            string title, sub;
+            OrbMode mode;
             if (server == null)
             {
-                s = playerError ?? L.T("Bağlantı başlatılamadı.", "Couldn't start the connection.");
-                kind = StatusKind.Warn;
+                title = L.T("Bağlantı başlatılamadı", "Couldn't start");
+                sub = playerError ?? "";
+                mode = OrbMode.Warn;
             }
             else if (addresses.Count == 0)
             {
-                s = L.T("Bilgisayar bir ağa bağlı değil. Telefonla aynı Wi-Fi ağına bağlan.", "The computer isn't on a network. Connect it to the same Wi-Fi as the phone.");
-                kind = StatusKind.Warn;
+                title = L.T("Ağ bağlantısı yok", "No network");
+                sub = L.T("Bilgisayarı telefonla aynı Wi-Fi ağına bağla.", "Connect the computer to the same Wi-Fi as the phone.");
+                mode = OrbMode.Warn;
             }
             else if (a == null)
             {
-                s = L.T("Telefon bekleniyor. Aşağıdaki QR kodu telefonun kamerasıyla okut.", "Waiting for a phone. Scan the QR code below with the phone's camera.");
-                kind = StatusKind.Idle;
+                title = L.T("Telefon bekleniyor", "Waiting for a phone");
+                sub = L.T("Telefonda Broken Microphone'u aç ya da Bağlan sekmesindeki QR kodu okut.", "Open Broken Microphone on the phone or scan the QR code on the Connect tab.");
+                mode = OrbMode.Idle;
             }
             else if (a.Muted)
             {
-                s = string.Format(L.T("{0} bağlı ama telefonda sessize alınmış.", "{0} is connected but muted on the phone."), a.Name);
-                kind = StatusKind.Warn;
+                title = L.T("Sessizde", "Muted");
+                sub = string.Format(L.T("{0} bağlı ama telefonda sessize alınmış.", "{0} is connected but muted on the phone."), a.Name);
+                mode = OrbMode.Muted;
             }
             else if (!a.Sending)
             {
-                s = string.Format(L.T("{0} bağlı. Telefonda mikrofon düğmesine bas.", "{0} is connected. Tap the microphone button on the phone."), a.Name);
-                kind = StatusKind.Idle;
+                title = L.T("Bağlı", "Connected");
+                sub = string.Format(L.T("{0}. Telefonda mikrofon düğmesine bas.", "{0}. Tap the microphone button on the phone."), a.Name);
+                mode = OrbMode.Waiting;
             }
             else
             {
-                s = string.Format(L.T("{0} mikrofon olarak çalışıyor.", "{0} is working as a microphone."), a.Name + (a.Mic != "" ? " (" + a.Mic + ")" : ""));
-                kind = StatusKind.Active;
+                title = L.T("Mikrofon açık", "Microphone on");
+                string to = MicName != null ? MicName : cfg.Monitor ? L.T("hoparlör", "speakers") : L.T("hiçbir yere çalınmıyor", "not played anywhere");
+                sub = a.Name + (a.Mic != "" ? " (" + a.Mic + ")" : "") + "  →  " + to;
+                mode = OrbMode.Live;
             }
-            if (server != null && playerError != null) { s += "\n" + L.T("Ses çıkışı: ", "Audio output: ") + playerError; kind = StatusKind.Warn; }
-            bool wrongOut = HasVirtual && (output == null || !output.Virtual);
-            if (server != null && wrongOut)
-            {
-                s += "\n" + L.T("Ses Discord gibi programlara gitmiyor: \"Ses nereye gitsin\"de hoparlör seçili. Sanal mikrofonu seç.",
-                                "The audio isn't reaching apps like Discord: a speaker is selected under \"Where the audio goes\". Choose the virtual microphone.");
-                kind = StatusKind.Warn;
-            }
-            if (server != null && !HasVirtual)
-            {
-                s += "\n" + L.T("Discord, Zoom ya da oyunlarda mikrofon olarak kullanmak için sanal mikrofon gerekli. Kurulu değil: \"Sanal mikrofonu kur…\"a bas.",
-                                "To use it as a microphone in Discord, Zoom or games you need a virtual microphone. None is installed: press \"Install a virtual microphone…\".");
-                if (kind == StatusKind.Idle) kind = StatusKind.Warn;
-            }
-            bool layout = false;
-            if (info.Text != s) { info.Text = s; layout = true; }
-            info.Kind = kind;
-            info.Invalidate();
-            bool showDriver = !HasVirtual || wrongOut;
-            if (btnDriver.Visible != showDriver) { btnDriver.Visible = showDriver; layout = true; }
-            string driverText = wrongOut ? L.T("Sanal mikrofona gönder", "Send to the virtual microphone") : L.T("Sanal mikrofonu kur…", "Install a virtual microphone…");
-            if (btnDriver.Text != driverText) { btnDriver.Text = driverText; btnDriver.Invalidate(); }
+            lblState.Text = title;
+            lblState2.Text = sub;
+            orb.Mode = mode;
+            orb.Invalidate();
 
-            string hint;
+            alertCount = 0;
+            if (server != null && playerError != null) Alert(L.T("Ses çıkışı: ", "Audio output: ") + playerError, null, null);
+            if (server != null && fw == FwState.Blocked)
+                Alert(string.Format(L.T("Windows güvenlik duvarı telefonun bağlanmasını engelliyor (ağ: {0}). İzin sadece bu programa ve yerel ağdaki cihazlara verilir.",
+                                        "Windows Firewall is blocking the phone (network: {0}). Permission is given only to this program and devices on your local network."), Firewall.ProfileName),
+                      L.T("İzin ver", "Allow"), AllowFirewall);
+            if (server != null && WrongOut)
+                Alert(L.T("Ses Discord gibi programlara gitmiyor: hoparlör seçili.", "The audio isn't reaching apps like Discord: a speaker is selected."),
+                      L.T("Sanal mikrofona gönder", "Send to virtual mic"), FixOutput);
+            if (server != null && !HasVirtual)
+                Alert(L.T("Discord, Zoom ya da oyunlarda mikrofon olarak kullanmak için sanal mikrofon gerekli.", "You need a virtual microphone to use it in Discord, Zoom or games."),
+                      L.T("Sanal mikrofonu kur…", "Install virtual mic…"), FixOutput);
+
+            // Ses sekmesi
             string mic = MicName;
             if (mic != null)
-                hint = string.Format(L.T("Discord, Zoom, Teams, OBS ya da oyunda mikrofon (giriş cihazı) olarak \"{0}\" seç. Kendi sesini duymak istersen aşağıdan aç.",
-                                         "In Discord, Zoom, Teams, OBS or your game, pick \"{0}\" as the microphone (input device). Turn on the switch below to hear yourself."), mic);
+                lblOutHint.Text = string.Format(L.T("Discord, Zoom, Teams, OBS ya da oyunda mikrofon (giriş cihazı) olarak \"{0}\" seç.",
+                                                    "In Discord, Zoom, Teams, OBS or your game, pick \"{0}\" as the microphone (input device)."), mic);
             else
-                hint = cfg.Monitor
-                    ? L.T("Bu bir hoparlör: sesi sadece sen duyarsın, Discord gibi programlara gitmez. Onun için sanal mikrofon kur.",
-                          "This is a speaker: only you hear the audio; it doesn't reach apps like Discord. Install a virtual microphone for that.")
-                    : L.T("Ses şu an hiçbir yere çalınmıyor; çubuk sesin geldiğini gösterir. Discord gibi programlarda kullanmak için sanal mikrofon kur.",
-                          "The audio isn't played anywhere right now; the bar shows it's arriving. Install a virtual microphone to use it in apps like Discord.");
-            if (lblOutHint.Text != hint) { lblOutHint.Text = hint; layout = true; }
-            if (layout) DoLayout();
+                lblOutHint.Text = cfg.Monitor
+                    ? L.T("Bu bir hoparlör: sesi sadece sen duyarsın, Discord gibi programlara gitmez.", "This is a speaker: only you hear the audio; it doesn't reach apps like Discord.")
+                    : L.T("Ses şu an hiçbir yere çalınmıyor; çubuk sesin geldiğini gösterir.", "The audio isn't played anywhere right now; the bar shows it's arriving.");
+            if (!HasVirtual)
+            {
+                lblVirt.Text = L.T("Kurulu değil. Discord, Zoom ya da oyunlarda kullanmak için gerekli. Broken Microphone, VB-Audio'nun ücretsiz sürücüsünü resmi sunucudan indirip imzasını denetleyerek kurar.",
+                                   "Not installed. You need it for Discord, Zoom or games. Broken Microphone downloads VB-Audio's free driver from the official server and checks its signature before installing.");
+                btnDriver.Text = L.T("Sanal mikrofonu kur…", "Install virtual mic…");
+            }
+            else if (WrongOut)
+            {
+                lblVirt.Text = L.T("Kurulu ama ses ona gönderilmiyor.", "Installed, but the audio isn't sent to it.");
+                btnDriver.Text = L.T("Sanal mikrofona gönder", "Send to virtual mic");
+            }
+            else lblVirt.Text = L.T("Kurulu ve seçili. ✓", "Installed and selected. ✓");
+            btnDriver.Invalidate();
+
+            // Ayarlar sekmesi
+            string fwText;
+            if (server == null) fwText = L.T("Bağlantı başlatılamadı.", "The connection couldn't start.");
+            else if (fw == FwState.Open) fwText = string.Format(L.T("✓ Telefon bu bilgisayara bağlanabilir (ağ: {0}, port {1}).", "✓ The phone can reach this computer (network: {0}, port {1})."), Firewall.ProfileName, Port);
+            else if (fw == FwState.Blocked) fwText = string.Format(L.T("Windows güvenlik duvarı telefonu engelliyor (ağ: {0}). \"İzin ver\"e bas; Windows yönetici izni sorar.", "Windows Firewall is blocking the phone (network: {0}). Press \"Allow\"; Windows asks for administrator rights."), Firewall.ProfileName);
+            else fwText = L.T("Güvenlik duvarı denetleniyor…", "Checking the firewall…");
+            if (fwMessage != null) fwText += "\n" + fwMessage;
+            lblFw.Text = fwText;
+            lblFw.ForeColor = fw == FwState.Blocked ? Theme.Warn : Theme.Text;
+            btnFw.Text = fw == FwState.Blocked ? L.T("İzin ver", "Allow") : L.T("İzni yeniden ekle", "Re-add permission");
+            btnFw.Kind = fw == FwState.Blocked ? BtnKind.Primary : BtnKind.Secondary;
+            btnFw.Invalidate();
+
+            string sig = title + "|" + sub + "|" + alertCount + "|" + alertText[0].Text + alertText[1].Text + alertText[2].Text + alertText[3].Text + "|" +
+                         lblOutHint.Text + lblVirt.Text + lblFw.Text + list.Items.Count;
+            if (sig != lastSig) { lastSig = sig; DoLayout(); }
+        }
+
+        void FixOutput()
+        {
+            if (!HasVirtual) { ShowDriverHelp(); return; }
+            foreach (OutputDevice d in pickOutput.Items)
+                if (d.Virtual)
+                {
+                    pickOutput.SelectedItem = d;
+                    output = d;
+                    cfg.Output = d.Name;
+                    cfg.Save();
+                    ResetPlayers();
+                    UpdateUi();
+                    break;
+                }
         }
 
         int slow;
@@ -620,8 +905,9 @@ namespace BrokenMicrophone
             var a = Active;
             float lv = 0;
             if (a != null && a.Sending) lv = a.Peak;
-            meter.Muted = a != null && a.Muted;
-            meter.Push(lv);
+            meter.Muted = meter2.Muted = a != null && a.Muted;
+            if (tab == TabMic) { meter.Push(lv); orb.Push(lv); }
+            if (tab == TabAudio) meter2.Push(lv);
             if (++slow % 6 == 0)
             {
                 // bağlantı olayı pencere hazır olmadan geldiyse kaçmasın
@@ -630,6 +916,7 @@ namespace BrokenMicrophone
                 UpdateUi();
             }
             if (slow % 60 == 0) btnCopy.Text = L.T("Adresi kopyala", "Copy address");
+            if (slow % 250 == 0) CheckFirewall();   // ~20 sn: ağ türü değişmiş olabilir
             // ağ değişti mi (ör. Wi-Fi'ye yeni bağlandı)
             if (slow % 75 == 0)
             {
@@ -637,12 +924,11 @@ namespace BrokenMicrophone
                 if (Signature(now) != Signature(addresses))
                 {
                     addresses = now;
-                    cmbAddress.Items.Clear();
-                    foreach (var x in addresses) cmbAddress.Items.Add(x);
-                    var sel = SelectedAddress;
-                    if (sel != null) cmbAddress.SelectedItem = sel;
+                    FillAddresses();
                     UpdateUrl();
+                    UpdateUi();
                     DoLayout();
+                    CheckFirewall();
                 }
             }
         }
@@ -669,7 +955,8 @@ namespace BrokenMicrophone
 
         void ShowConnectHelp()
         {
-            using (var d = new ConnectHelpDialog(cfg.Port)) d.ShowDialog(this);
+            using (var d = new ConnectHelpDialog(Port)) d.ShowDialog(this);
+            CheckFirewall();
         }
 
         void ShowDriverHelp()
@@ -682,6 +969,7 @@ namespace BrokenMicrophone
             ResetPlayers();
             UpdateUi();
             DoLayout();
+            CheckFirewall();
         }
     }
 }

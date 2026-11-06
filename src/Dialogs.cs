@@ -140,7 +140,7 @@ namespace BrokenMicrophone
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            var g = Theme.Prep(e, BackColor);
+            var g = Theme.Prep(e, this);
             float y = 0, tx = Theme.P(44), d = Theme.P(28);
             using (var bold = new Font(Font, FontStyle.Bold))
                 for (int i = 0; i < Steps.Length; i++)
@@ -379,8 +379,8 @@ namespace BrokenMicrophone
                         L.T("Telefon mobil veride ya da başka bir Wi-Fi'de olabilir. İkisi aynı modeme bağlı olmalı. Misafir ağları cihazların birbirini görmesini engeller.",
                             "The phone may be on mobile data or another Wi-Fi. Both must be on the same router. Guest networks stop devices from seeing each other.") },
                 new[] { L.T("Windows güvenlik duvarı", "Windows Firewall"),
-                        L.T("Windows, telefonun bağlanmasını engelliyor olabilir. Aşağıdaki düğme sadece Broken Microphone'a, sadece özel ağlarda izin verir (yönetici izni ister).",
-                            "Windows may be blocking the phone. The button below allows only Broken Microphone, only on private networks (asks for administrator rights).") },
+                        L.T("Windows, telefonun bağlanmasını engelliyor olabilir. Aşağıdaki düğme sadece Broken Microphone'a, sadece yerel ağdaki cihazlara izin verir (yönetici izni ister).",
+                            "Windows may be blocking the phone. The button below allows only Broken Microphone, only for devices on your local network (asks for administrator rights).") },
                 new[] { L.T("Ağ \"Ortak\" olarak ayarlı", "Network set to \"Public\""),
                         L.T("Ortak ağlarda Windows gelen bağlantıları engeller. Ayarlar → Ağ ve İnternet → Wi-Fi → ağın adı → \"Özel ağ\" seç.",
                             "On public networks Windows blocks incoming connections. Settings → Network & internet → Wi-Fi → your network → choose \"Private network\".") },
@@ -417,29 +417,9 @@ namespace BrokenMicrophone
 
         void AllowFirewall()
         {
-            string exe = Application.ExecutablePath;
-            string args = "/c netsh advfirewall firewall delete rule name=\"Broken Microphone\" >nul 2>&1 & " +
-                          "netsh advfirewall firewall add rule name=\"Broken Microphone\" dir=in action=allow program=\"" + exe + "\" enable=yes profile=private,domain protocol=TCP localport=" + port;
-            try
-            {
-                var psi = new System.Diagnostics.ProcessStartInfo("cmd.exe", args);
-                psi.Verb = "runas";
-                psi.WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden;
-                psi.UseShellExecute = true;
-                using (var p = System.Diagnostics.Process.Start(psi))
-                {
-                    p.WaitForExit(20000);
-                    lblFw.ForeColor = p.ExitCode == 0 ? Theme.Accent : Theme.Danger;
-                    lblFw.Text = p.ExitCode == 0 ? L.T("İzin verildi. Telefondan sayfayı yenile.", "Allowed. Reload the page on the phone.")
-                                                 : L.T("İzin eklenemedi (hata ", "Couldn't add the rule (error ") + p.ExitCode + ").";
-                }
-            }
-            catch (System.ComponentModel.Win32Exception)
-            {
-                lblFw.ForeColor = Theme.Sub;
-                lblFw.Text = L.T("Yönetici izni verilmedi; değişiklik yapılmadı.", "Administrator permission wasn't given; nothing changed.");
-            }
-            catch (Exception ex) { lblFw.ForeColor = Theme.Danger; lblFw.Text = ex.Message; }
+            string err = Firewall.Allow(port);
+            lblFw.ForeColor = err == null ? Theme.Accent : Theme.Danger;
+            lblFw.Text = err == null ? L.T("İzin verildi. Telefonda yeniden bağlan.", "Allowed. Reconnect on the phone.") : err;
         }
     }
 
