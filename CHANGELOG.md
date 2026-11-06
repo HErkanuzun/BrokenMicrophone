@@ -2,7 +2,7 @@
 
 All notable changes to Broken Microphone. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.3] - 2026-11-06
 
 ### Changed
 - Logo, name and the language / About buttons sit in a fixed header at the top, in the same place in every Broken app. They no longer move when you switch pages, and content always starts at the top instead of being centred vertically.
