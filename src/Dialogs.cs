@@ -6,8 +6,9 @@ using System.Windows.Forms;
 namespace BrokenMicrophone
 {
     // Koyu temalı onay penceresi. word verilirse kullanıcının o kelimeyi yazması gerekir.
-    class ConfirmDialog : Form
+    class ConfirmDialog : Form, ISurface
     {
+        readonly TitleBar titleBar = new TitleBar();
         readonly TextBox input;
         readonly FlatButton ok;
 
@@ -22,12 +23,17 @@ namespace BrokenMicrophone
             ForeColor = Theme.Text;
             Font = new Font("Segoe UI", 9.5f);
             AutoScaleMode = AutoScaleMode.None;
-            int w = Theme.P(500), pad = Theme.P(24), y = pad;
+            int w = Theme.P(500), pad = Theme.P(24), y = titleBar.Height + Theme.P(4);
+            titleBar.MinMax = false;
+            titleBar.Dock = DockStyle.Top;
+            Controls.Add(titleBar);
+            DoubleBuffered = true;
 
             var t = new Label();
             t.Text = title;
             t.Font = new Font(Font.FontFamily, 13f, FontStyle.Bold);
             t.ForeColor = danger ? Theme.Danger : Theme.Text;
+            t.BackColor = Color.Transparent;
             t.SetBounds(pad, y, w - pad * 2, Theme.P(30));
             Controls.Add(t);
             y += Theme.P(38);
@@ -35,6 +41,7 @@ namespace BrokenMicrophone
             var b = new Label();
             b.Text = body;
             b.ForeColor = Theme.Text;
+            b.BackColor = Color.Transparent;
             using (var g = CreateGraphics())
                 b.SetBounds(pad, y, w - pad * 2, (int)Math.Ceiling(g.MeasureString(body, Font, w - pad * 2).Height) + Theme.P(4));
             Controls.Add(b);
@@ -45,6 +52,7 @@ namespace BrokenMicrophone
                 var hint = new Label();
                 hint.Text = L.T("Onaylamak için büyük harflerle şunu yaz: ", "To confirm, type this in capitals: ") + word;
                 hint.ForeColor = Theme.Sub;
+                hint.BackColor = Color.Transparent;
                 hint.SetBounds(pad, y, w - pad * 2, Theme.P(22));
                 Controls.Add(hint);
                 y += Theme.P(26);
@@ -77,7 +85,12 @@ namespace BrokenMicrophone
             CancelButton = null;
         }
 
-        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Theme.DarkTitle(this); }
+        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Frame.Apply(this); }
+        protected override void WndProc(ref Message m) { if (!Frame.Handle(this, ref m, titleBar.Height)) base.WndProc(ref m); }
+        protected override void OnActivated(EventArgs e) { base.OnActivated(e); titleBar.Invalidate(); }
+        protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); titleBar.Invalidate(); }
+        public void PaintSurface(Graphics g, Rectangle r) { Glass.Backdrop(g, ClientSize, Point.Empty, r); }
+        protected override void OnPaintBackground(PaintEventArgs e) { PaintSurface(e.Graphics, e.ClipRectangle); }
 
         protected override void OnShown(EventArgs e)
         {
@@ -158,9 +171,10 @@ namespace BrokenMicrophone
     }
 
     // ------------------------------------------------------------------ Koyu temalı küçük pencere tabanı
-    class DarkDialog : Form
+    class DarkDialog : Form, ISurface
     {
         protected int W, Pad, Y;
+        protected readonly TitleBar titleBar = new TitleBar();
 
         public DarkDialog(int width)
         {
@@ -176,10 +190,19 @@ namespace BrokenMicrophone
             Icon = Theme.AppIcon(32);
             W = Theme.P(width);
             Pad = Theme.P(26);
-            Y = Pad;
+            DoubleBuffered = true;
+            titleBar.MinMax = false;
+            titleBar.Dock = DockStyle.Top;
+            Controls.Add(titleBar);
+            Y = titleBar.Height + Theme.P(4);
         }
 
-        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Theme.DarkTitle(this); }
+        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Frame.Apply(this); }
+        protected override void WndProc(ref Message m) { if (!Frame.Handle(this, ref m, titleBar.Height)) base.WndProc(ref m); }
+        protected override void OnActivated(EventArgs e) { base.OnActivated(e); titleBar.Invalidate(); }
+        protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); titleBar.Invalidate(); }
+        public void PaintSurface(Graphics g, Rectangle r) { Glass.Backdrop(g, ClientSize, Point.Empty, r); }
+        protected override void OnPaintBackground(PaintEventArgs e) { PaintSurface(e.Graphics, e.ClipRectangle); }
 
         protected override bool ProcessDialogKey(Keys k)
         {
@@ -193,7 +216,8 @@ namespace BrokenMicrophone
             l.Text = text;
             l.Font = f;
             l.ForeColor = c;
-            l.BackColor = Theme.Bg;
+            l.BackColor = Color.Transparent;
+            l.UseCompatibleTextRendering = true;   // ölçüm ile çizim aynı yöntemle: son satır kesilmesin
             using (var g = CreateGraphics())
                 l.SetBounds(x, Y, width, (int)Math.Ceiling(g.MeasureString(text, f, width).Height) + Theme.P(2));
             Controls.Add(l);
@@ -206,6 +230,7 @@ namespace BrokenMicrophone
             var logo = new PictureBox();
             logo.SizeMode = PictureBoxSizeMode.Zoom;
             logo.Image = Theme.Logo();
+            logo.BackColor = Color.Transparent;
             logo.SetBounds(Pad, Y, Theme.P(52), Theme.P(52));
             Controls.Add(logo);
             int tx = Pad + Theme.P(66);
@@ -238,7 +263,7 @@ namespace BrokenMicrophone
             link.LinkColor = Theme.Accent;
             link.ActiveLinkColor = Theme.AccentHover;
             link.VisitedLinkColor = Theme.Accent;
-            link.BackColor = Theme.Bg;
+            link.BackColor = Color.Transparent;
             link.AutoSize = true;
             link.Location = new Point(Pad, Y);
             link.LinkClicked += delegate { Open(AppInfo.Repo); };

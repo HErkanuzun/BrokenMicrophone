@@ -18,8 +18,9 @@ namespace BrokenMicrophone
         public static readonly Color AccentHi = Color.FromArgb(95, 224, 205);
         public static readonly Color Muted = Color.FromArgb(138, 147, 163);
 
-        static Bitmap cache;
-        static Size cacheSize;
+        // pencere boyutuna göre önbellek (ana pencere ve açık iletişim kutusu aynı anda)
+        static readonly Dictionary<Size, Bitmap> cache = new Dictionary<Size, Bitmap>();
+        static readonly List<Size> order = new List<Size>();
 
         static Bitmap Make(Size s)
         {
@@ -69,17 +70,19 @@ namespace BrokenMicrophone
         public static void Backdrop(Graphics g, Size client, Point origin, Rectangle r)
         {
             if (client.Width < 1 || client.Height < 1) { using (var b = new SolidBrush(Bg)) g.FillRectangle(b, r); return; }
-            if (cache == null || cacheSize != client)
+            Bitmap bmp;
+            if (!cache.TryGetValue(client, out bmp))
             {
-                if (cache != null) cache.Dispose();
-                cache = Make(client);
-                cacheSize = client;
+                bmp = Make(client);
+                cache[client] = bmp;
+                order.Add(client);
+                if (order.Count > 3) { cache[order[0]].Dispose(); cache.Remove(order[0]); order.RemoveAt(0); }
             }
             var st = g.Save();
             g.InterpolationMode = InterpolationMode.NearestNeighbor;
             g.PixelOffsetMode = PixelOffsetMode.None;
             g.CompositingMode = CompositingMode.SourceCopy;
-            g.DrawImage(cache, r, new Rectangle(r.X + origin.X, r.Y + origin.Y, r.Width, r.Height), GraphicsUnit.Pixel);
+            g.DrawImage(bmp, r, new Rectangle(r.X + origin.X, r.Y + origin.Y, r.Width, r.Height), GraphicsUnit.Pixel);
             g.Restore(st);
         }
 

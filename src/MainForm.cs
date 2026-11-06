@@ -16,6 +16,7 @@ namespace BrokenMicrophone
         readonly Settings cfg;
         readonly GlassPage page = new GlassPage();
         readonly TabBar bar = new TabBar();
+        readonly TitleBar titleBar = new TitleBar();
         readonly System.Windows.Forms.Timer tick = new System.Windows.Forms.Timer();
         public bool ExitRequested;
 
@@ -88,8 +89,10 @@ namespace BrokenMicrophone
             page.Dock = DockStyle.Fill;
             bar.Dock = DockStyle.Bottom;
             bar.Height = P(84);
+            titleBar.Dock = DockStyle.Top;
             Controls.Add(page);
             Controls.Add(bar);
+            Controls.Add(titleBar);
             page.Resize += delegate { DoLayout(); };
             page.Scrolled += delegate { DoLayout(); };
             bar.Changed += delegate (int i) { ShowTab(i); };
@@ -110,7 +113,10 @@ namespace BrokenMicrophone
 
         static int P(float v) { return Theme.P(v); }
 
-        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Theme.DarkTitle(this); }
+        protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Frame.Apply(this); }
+        protected override void WndProc(ref Message m) { if (!Frame.Handle(this, ref m, titleBar.Height)) base.WndProc(ref m); }
+        protected override void OnActivated(EventArgs e) { base.OnActivated(e); titleBar.Invalidate(); }
+        protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); titleBar.Invalidate(); }
 
         public void PaintSurface(Graphics g, Rectangle r) { Glass.Backdrop(g, ClientSize, Point.Empty, r); }
         protected override void OnPaintBackground(PaintEventArgs e) { PaintSurface(e.Graphics, e.ClipRectangle); }
@@ -157,6 +163,12 @@ namespace BrokenMicrophone
                         if (sc.WorkingArea.IntersectsWith(new Rectangle(r.X + 40, r.Y + 10, Math.Max(1, r.Width - 80), 40))) visible = true;
                     if (visible && r.Width >= MinimumSize.Width && r.Height >= MinimumSize.Height)
                     {
+                        // ekrana sığdır (alttaki sekme çubuğu görev çubuğunun arkasında kalmasın)
+                        var area = Screen.FromRectangle(r).WorkingArea;
+                        r.Width = Math.Min(r.Width, area.Width);
+                        r.Height = Math.Min(r.Height, area.Height);
+                        r.X = Math.Max(area.Left, Math.Min(r.X, area.Right - r.Width));
+                        r.Y = Math.Max(area.Top, Math.Min(r.Y, area.Bottom - r.Height));
                         StartPosition = FormStartPosition.Manual;
                         Bounds = r;
                         if (p[4] == "1") WindowState = FormWindowState.Maximized;
@@ -539,7 +551,7 @@ namespace BrokenMicrophone
                 pad = PW < P(560) ? P(16) : P(28);
                 W = Math.Min(tab == TabConnect ? P(900) : P(620), PW - pad * 2);
                 X = (PW - W) / 2;
-                Y = pad + P(6) - page.ScrollY;
+                Y = Math.Max(P(6), pad - P(10)) - page.ScrollY;
                 titles[tab].Location = new Point(X, Y);
                 Y = titles[tab].Bottom + P(2);
                 if (subs[tab] != null)

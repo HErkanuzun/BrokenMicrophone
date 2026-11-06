@@ -6,7 +6,12 @@ All notable changes to Broken Microphone. The format follows [Keep a Changelog](
 
 ### Changed
 - New Windows window in the same style as the Android app: a bottom tab bar with four pages (Microphone, Connect, Audio, Settings), large titles and glass cards over a soft colour background. No more single long page.
+- The window frame matches the design: no white Windows title bar; the background reaches the top and the minimize / maximize / close buttons are drawn in the same glass style. Snapping, resizing from the edges, shadow and rounded corners still work. Dialogs use the same frame.
 - The firewall permission now covers every network type (also "Public") but only for devices on your local network (`remoteip=localsubnet`). Before, it only covered private networks, so phones couldn't connect when Windows had marked the network as Public.
+
+### Fixed
+- A saved window position taller than the screen is moved back inside it, so the tab bar is never hidden behind the taskbar.
+- The last line of text in dialogs is no longer cut off.
 
 ### Added
 - The window checks Windows Firewall by itself (no admin rights needed to check). If the phone would be blocked, the Microphone page says so and **Allow** fixes it in one click (Windows asks for administrator rights). It also removes block rules Windows may have added for the program.
