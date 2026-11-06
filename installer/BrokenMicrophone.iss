@@ -11,7 +11,7 @@
 #endif
 ; Windows sürüm bilgisi sadece sayı kabul eder ("1.2-beta.1" -> "1.2")
 #ifndef AppNumVersion
-  #define AppNumVersion AppVersion
+  #define AppNumVersion AppVersion + ".0.0"
 #endif
 #define AppName "Broken Microphone"
 #define AppExe "BrokenMicrophone.exe"
@@ -28,7 +28,7 @@ AppPublisherURL={#AppUrl}
 AppSupportURL={#AppUrl}/issues
 AppUpdatesURL={#AppUrl}/releases
 AppCopyright=Copyright (c) 2026 HErkanuzun. MIT License.
-VersionInfoVersion={#AppNumVersion}.0.0
+VersionInfoVersion={#AppNumVersion}
 VersionInfoProductName={#AppName}
 VersionInfoDescription={#AppName} Setup
 DefaultDirName={autopf}\{#AppName}

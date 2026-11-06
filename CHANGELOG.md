@@ -2,7 +2,7 @@
 
 All notable changes to Broken Microphone. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [1.2.1] - 2026-11-06
 
 ### Changed
 - "Install a virtual microphone" no longer sends you to a website: Broken Microphone downloads VB-CABLE from VB-Audio's official server itself and only runs the setup if it carries VB-Audio's valid digital signature.
