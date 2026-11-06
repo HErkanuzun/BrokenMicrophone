@@ -178,15 +178,21 @@ namespace BrokenMicrophone
                 if (c.Muted) return;
                 try
                 {
-                    if (player == null || player.Rate != c.Rate)
+                    // Sanal mikrofon seçiliyse ses hep oraya gider. Hoparlöre (kendi sesini duymak) sadece istenirse.
+                    bool virt = output != null && output.Virtual;
+                    if (virt || cfg.Monitor)
                     {
-                        if (player != null) player.Dispose();
-                        player = null;
-                        player = new Player(output == null ? -1 : output.Id, c.Rate);
-                        playerError = null;
+                        if (player == null || player.Rate != c.Rate)
+                        {
+                            if (player != null) player.Dispose();
+                            player = null;
+                            player = new Player(output == null ? -1 : output.Id, c.Rate);
+                            playerError = null;
+                        }
+                        player.Write(buf, off, n);
                     }
-                    player.Write(buf, off, n);
-                    if (cfg.Monitor && output != null && output.Virtual)
+                    else if (player != null) { player.Dispose(); player = null; }
+                    if (cfg.Monitor && virt)
                     {
                         if (monitor == null || monitor.Rate != c.Rate)
                         {
@@ -299,7 +305,11 @@ namespace BrokenMicrophone
             btnAbout = Btn(L.T("Hakkında", "About"), BtnKind.Ghost, delegate { using (var a = new AboutDialog()) a.ShowDialog(this); });
 
             info = Add(new StatusBox());
-            btnDriver = Btn(L.T("Sanal mikrofonu kur…", "Install a virtual microphone…"), BtnKind.Primary, delegate { ShowDriverHelp(); });
+            btnDriver = Btn(L.T("Sanal mikrofonu kur…", "Install a virtual microphone…"), BtnKind.Primary, delegate
+            {
+                if (!HasVirtual) { ShowDriverHelp(); return; }
+                foreach (OutputDevice d in cmbOutput.Items) if (d.Virtual) { cmbOutput.SelectedItem = d; break; }   // seçim olayı kaydeder ve yeniler
+            });
 
             // sol: telefon
             secPhone = Section(L.T("Telefonu bağla", "Connect your phone"));
@@ -343,9 +353,9 @@ namespace BrokenMicrophone
             };
             lblOutHint = Text2("", Theme.Sub, 9f, FontStyle.Regular);
             meter = Add(new LevelMeter());
-            tglMonitor = Add(new Toggle(L.T("Gelen sesi hoparlörden de dinle", "Also play the audio on the speakers")));
+            tglMonitor = Add(new Toggle(L.T("Kendi sesimi hoparlörden duy", "Hear myself on the speakers")));
             tglMonitor.Checked = cfg.Monitor;
-            tglMonitor.Changed += delegate (bool on) { cfg.Monitor = on; cfg.Save(); };
+            tglMonitor.Changed += delegate (bool on) { cfg.Monitor = on; cfg.Save(); UpdateUi(); };
 
             secDevices = Section(L.T("Bağlı cihazlar", "Connected devices"));
             list = Add(new ClientList());
@@ -473,8 +483,8 @@ namespace BrokenMicrophone
             meter.SetBounds(rx, y, rw, P(12));
             y = meter.Bottom + P(12);
             tglMonitor.SetBounds(rx, y, rw, P(30));
-            tglMonitor.Visible = output != null && output.Virtual;
-            if (tglMonitor.Visible) y = tglMonitor.Bottom + P(14); else y += P(4);
+            tglMonitor.Visible = true;
+            y = tglMonitor.Bottom + P(14);
             secDevices.Location = new Point(rx, y);
             y += P(24);
             list.SetBounds(rx, y, rw, list.Measure());
@@ -567,28 +577,40 @@ namespace BrokenMicrophone
                 kind = StatusKind.Active;
             }
             if (server != null && playerError != null) { s += "\n" + L.T("Ses çıkışı: ", "Audio output: ") + playerError; kind = StatusKind.Warn; }
+            bool wrongOut = HasVirtual && (output == null || !output.Virtual);
+            if (server != null && wrongOut)
+            {
+                s += "\n" + L.T("Ses Discord gibi programlara gitmiyor: \"Ses nereye gitsin\"de hoparlör seçili. Sanal mikrofonu seç.",
+                                "The audio isn't reaching apps like Discord: a speaker is selected under \"Where the audio goes\". Choose the virtual microphone.");
+                kind = StatusKind.Warn;
+            }
             if (server != null && !HasVirtual)
             {
-                s += "\n" + L.T("Sanal mikrofon sürücüsü kurulu değil: ses şimdilik sadece hoparlörden duyulur, başka programlarda mikrofon olarak görünmez.",
-                                "No virtual microphone driver is installed: for now the audio only plays on the speakers and doesn't show up as a microphone in other apps.");
+                s += "\n" + L.T("Discord, Zoom ya da oyunlarda mikrofon olarak kullanmak için sanal mikrofon gerekli. Kurulu değil: \"Sanal mikrofonu kur…\"a bas.",
+                                "To use it as a microphone in Discord, Zoom or games you need a virtual microphone. None is installed: press \"Install a virtual microphone…\".");
                 if (kind == StatusKind.Idle) kind = StatusKind.Warn;
             }
             bool layout = false;
             if (info.Text != s) { info.Text = s; layout = true; }
             info.Kind = kind;
             info.Invalidate();
-            bool showDriver = !HasVirtual;
+            bool showDriver = !HasVirtual || wrongOut;
             if (btnDriver.Visible != showDriver) { btnDriver.Visible = showDriver; layout = true; }
+            string driverText = wrongOut ? L.T("Sanal mikrofona gönder", "Send to the virtual microphone") : L.T("Sanal mikrofonu kur…", "Install a virtual microphone…");
+            if (btnDriver.Text != driverText) { btnDriver.Text = driverText; btnDriver.Invalidate(); }
 
             string hint;
             string mic = MicName;
             if (mic != null)
-                hint = string.Format(L.T("Discord, Zoom, Teams, OBS ya da oyunda mikrofon olarak \"{0}\" seç.", "In Discord, Zoom, Teams, OBS or your game, pick \"{0}\" as the microphone."), mic);
+                hint = string.Format(L.T("Discord, Zoom, Teams, OBS ya da oyunda mikrofon (giriş cihazı) olarak \"{0}\" seç. Kendi sesini duymak istersen aşağıdan aç.",
+                                         "In Discord, Zoom, Teams, OBS or your game, pick \"{0}\" as the microphone (input device). Turn on the switch below to hear yourself."), mic);
             else
-                hint = L.T("Bu bir hoparlör: sesi sadece duyarsın. Başka programlarda mikrofon olarak kullanmak için sanal mikrofonun girişini seç.",
-                           "This is a speaker: you only hear the audio. To use it as a microphone in other apps, choose a virtual microphone's input.");
+                hint = cfg.Monitor
+                    ? L.T("Bu bir hoparlör: sesi sadece sen duyarsın, Discord gibi programlara gitmez. Onun için sanal mikrofon kur.",
+                          "This is a speaker: only you hear the audio; it doesn't reach apps like Discord. Install a virtual microphone for that.")
+                    : L.T("Ses şu an hiçbir yere çalınmıyor; çubuk sesin geldiğini gösterir. Discord gibi programlarda kullanmak için sanal mikrofon kur.",
+                          "The audio isn't played anywhere right now; the bar shows it's arriving. Install a virtual microphone to use it in apps like Discord.");
             if (lblOutHint.Text != hint) { lblOutHint.Text = hint; layout = true; }
-            if (tglMonitor.Visible != (output != null && output.Virtual)) layout = true;
             if (layout) DoLayout();
         }
 

@@ -10,7 +10,7 @@ namespace BrokenMicrophone
         public int Id;          // waveOut cihaz numarası; -1 = Windows'un varsayılanı
         public string Name;
         public bool Virtual;    // sanal mikrofonun girişi (sesi buraya verince başka programlarda mikrofon olarak görünür)
-        public override string ToString() { return Name; }
+        public override string ToString() { return Virtual ? L.T("Sanal mikrofon · ", "Virtual microphone · ") + Name : Name; }
     }
 
     // Telefondan gelen 16 bit mono sesi bir çıkış cihazına verir (winmm waveOut).

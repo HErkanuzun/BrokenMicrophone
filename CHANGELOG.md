@@ -2,6 +2,12 @@
 
 All notable changes to Broken Microphone. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed
+- The audio only plays on the speakers if you turn on "Hear myself on the speakers" (off by default), so you no longer hear yourself.
+- If a virtual microphone is installed but a speaker is selected, the window says the audio isn't reaching Discord and offers "Send to the virtual microphone". Virtual microphones are labelled in the list.
+
 ## [1.2] - 2026-11-06
 
 ### Added
