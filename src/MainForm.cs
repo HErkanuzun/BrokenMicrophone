@@ -17,6 +17,7 @@ namespace BrokenMicrophone
         readonly GlassPage page = new GlassPage();
         readonly TabBar bar = new TabBar();
         readonly TitleBar titleBar = new TitleBar();
+        readonly AppHeader header = new AppHeader();
         readonly System.Windows.Forms.Timer tick = new System.Windows.Forms.Timer();
         public bool ExitRequested;
 
@@ -96,6 +97,9 @@ namespace BrokenMicrophone
             titleBar.Dock = DockStyle.Top;
             Controls.Add(page);
             Controls.Add(bar);
+            header.Dock = DockStyle.Top;
+            Controls.Add(header);
+            titleBar.ShowTitle = false;
             Controls.Add(titleBar);
             page.Resize += delegate { DoLayout(); };
             page.Scrolled += delegate { DoLayout(); };
@@ -118,7 +122,7 @@ namespace BrokenMicrophone
         static int P(float v) { return Theme.P(v); }
 
         protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Frame.Apply(this); }
-        protected override void WndProc(ref Message m) { if (!Frame.Handle(this, ref m, titleBar.Height)) base.WndProc(ref m); }
+        protected override void WndProc(ref Message m) { if (!Frame.Handle(this, ref m, titleBar.Height + header.Height)) base.WndProc(ref m); }
         protected override void OnActivated(EventArgs e) { base.OnActivated(e); titleBar.Invalidate(); }
         protected override void OnDeactivate(EventArgs e) { base.OnDeactivate(e); titleBar.Invalidate(); }
 
@@ -362,7 +366,7 @@ namespace BrokenMicrophone
         }
 
         Label Section(string text) { return Text2(L.Upper(text), Theme.Sub, 8f, FontStyle.Bold); }
-        Label Title(string text) { return Text2(text, Theme.Text, 22f, FontStyle.Bold); }
+        Label Title(string text) { return Text2(text, Theme.Text, 19f, FontStyle.Bold); }
         Label Sub(string text) { return Text2(text, Theme.Sub, 10f, FontStyle.Regular); }
 
         void BuildUi()
@@ -372,6 +376,11 @@ namespace BrokenMicrophone
             for (int i = 0; i < 4; i++) { groups[i].Clear(); subs[i] = null; }
 
             bar.Font = Font;
+            header.Font = Font;
+            header.Logo = Theme.Logo();
+            header.Title = AppInfo.Name;
+            header.Subtitle = L.T("Telefonunu ya da tabletini bilgisayarın mikrofonu yap.", "Use your phone or tablet as the computer's microphone.");
+            header.Invalidate();
             bar.Labels = new[] { L.T("Mikrofon", "Microphone"), L.T("Bağlan", "Connect"), L.T("Ses", "Audio"), L.T("Ayarlar", "Settings") };
             bar.IconKinds = new[] { Icons.Mic, Icons.Scan, Icons.Tune, Icons.Gear };
             bar.Selected = tab;

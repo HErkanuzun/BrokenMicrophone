@@ -5,6 +5,7 @@ All notable changes to Broken Microphone. The format follows [Keep a Changelog](
 ## [Unreleased]
 
 ### Changed
+- Logo, name and the language / About buttons sit in a fixed header at the top, in the same place in every Broken app. They no longer move when you switch pages, and content always starts at the top instead of being centred vertically.
 - New Windows window in the same style as the Android app: a bottom tab bar with four pages (Microphone, Connect, Audio, Settings), large titles and glass cards over a soft colour background. No more single long page.
 - The window frame matches the design: no white Windows title bar; the background reaches the top and the minimize / maximize / close buttons are drawn in the same glass style. Snapping, resizing from the edges, shadow and rounded corners still work. Dialogs use the same frame.
 - The firewall permission now covers every network type (also "Public") but only for devices on your local network (`remoteip=localsubnet`). Before, it only covered private networks, so phones couldn't connect when Windows had marked the network as Public.
