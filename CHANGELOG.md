@@ -16,7 +16,8 @@ All notable changes to Broken Microphone. The format follows [Keep a Changelog](
 - The last line of text in dialogs is no longer cut off.
 
 ### Added
-- Rename the virtual microphone: on the Audio page type a name (default "Broken Mic") and press Rename. Discord, Zoom and games then show e.g. "Broken Mic (VB-Audio Virtual Cable)". It's the same as Windows' own rename in Sound settings; if Windows requires it, it asks for administrator rights.
+- The virtual microphone is called "Broken Mic" in Discord, Zoom, games and other programs instead of "VB-Audio Virtual Cable" (set once automatically, also right after installing the driver). You can change the name on the Audio page; the small second line shows "Microphone". No administrator rights needed on most PCs.
+- Closing the window no longer quits: Broken Microphone keeps running in the system tray and the phone microphone stays on. While hidden it does no drawing, checks the connection once a second and gives unused memory back to Windows (about 9 MB). Click the tray icon to open it again; right-click → Exit to quit.
 - Tip on the Audio page to turn off Discord's own noise suppression and echo cancellation (the phone already does them).
 - The window checks Windows Firewall by itself (no admin rights needed to check). If the phone would be blocked, the Microphone page says so and **Allow** fixes it in one click (Windows asks for administrator rights). It also removes block rules Windows may have added for the program.
 

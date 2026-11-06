@@ -14,6 +14,8 @@ namespace BrokenMicrophone
         public string Output = "";      // sesin verildiği çıkış cihazı (sanal mikrofonun girişi)
         public string Address = "";     // birden fazla ağ varsa seçilen IP
         public bool Monitor = false;    // gelen sesi hoparlörden de dinle
+        public bool MicNamed = false;   // sanal mikrofona bir kez "Broken Mic" adı verildi
+        public bool TrayTipShown = false;   // "arka planda çalışıyor" bildirimi bir kez gösterildi
 
         public static string Folder
         {
@@ -60,6 +62,8 @@ namespace BrokenMicrophone
                             case "output": s.Output = v; break;
                             case "address": s.Address = v; break;
                             case "monitor": s.Monitor = v == "1"; break;
+                            case "micnamed": s.MicNamed = v == "1"; break;
+                            case "traytip": s.TrayTipShown = v == "1"; break;
                         }
                     }
             }
@@ -74,7 +78,8 @@ namespace BrokenMicrophone
             {
                 File.WriteAllLines(FilePath, new[] {
                     "lang=" + Lang, "window=" + Window, "port=" + Port, "key=" + Key,
-                    "output=" + Output, "address=" + Address, "monitor=" + (Monitor ? "1" : "0") });
+                    "output=" + Output, "address=" + Address, "monitor=" + (Monitor ? "1" : "0"),
+                    "micnamed=" + (MicNamed ? "1" : "0"), "traytip=" + (TrayTipShown ? "1" : "0") });
             }
             catch { }
         }

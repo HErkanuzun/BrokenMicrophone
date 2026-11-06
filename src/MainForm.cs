@@ -71,6 +71,8 @@ namespace BrokenMicrophone
         TextField txtMicName;
         MicName.Endpoint micEp;           // sanal mikrofonun kayıt ucu (Discord'da görünen ad)
         string renameMsg;
+        NotifyIcon tray;
+        bool background;                  // pencere kapalı, uygulama tepside çalışıyor
 
         // Ayarlar
         Label secLang, secNet, lblFw, secAbout, lblApp, lblFoot;
@@ -113,6 +115,8 @@ namespace BrokenMicrophone
             BuildUi();
             InitialSize();
             CheckFirewall();
+            SetupTray();
+            DefaultMicName();
 
             tick.Interval = 80;
             tick.Tick += delegate { OnTick(); };
@@ -132,7 +136,15 @@ namespace BrokenMicrophone
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            // X: uygulama kapanmaz, tepsiye iner ve telefondan gelen ses akmaya devam eder
+            if (!ExitRequested && e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                GoBackground();
+                return;
+            }
             ExitRequested = true;
+            if (tray != null) { tray.Visible = false; tray.Dispose(); tray = null; }
             SavePlacement();
             tick.Stop();
             if (server != null) server.Stop();
@@ -148,10 +160,101 @@ namespace BrokenMicrophone
 
         public void BringToFront2()
         {
+            if (background) LeaveBackground();
             if (WindowState == FormWindowState.Minimized) WindowState = FormWindowState.Normal;
             Show();
             Activate();
             BringToFront();
+        }
+
+        // ------------------------------------------------------------------ tepsi (arka plan)
+        void SetupTray()
+        {
+            tray = new NotifyIcon();
+            tray.Icon = Theme.AppIcon(16);
+            tray.Text = AppInfo.Name;
+            var menu = new ContextMenuStrip();
+            menu.Renderer = new ToolStripProfessionalRenderer(new DarkMenuColors()) { RoundedEdges = false };
+            menu.ShowImageMargin = false;
+            menu.BackColor = Color.FromArgb(27, 31, 39);
+            menu.ForeColor = Theme.Text;
+            menu.Font = Font;
+            var open = menu.Items.Add(L.T("Aç", "Open"));
+            open.Font = new Font(Font, FontStyle.Bold);
+            open.Click += delegate { BringToFront2(); };
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add(L.T("Çıkış (mikrofonu kapat)", "Exit (turn the microphone off)")).Click += delegate { RequestExit(); };
+            tray.ContextMenuStrip = menu;
+            tray.MouseClick += delegate (object s, MouseEventArgs e) { if (e.Button == MouseButtons.Left) BringToFront2(); };
+            tray.Visible = true;
+        }
+
+        void GoBackground()
+        {
+            SavePlacement();
+            background = true;
+            Hide();
+            tick.Interval = 1000;   // arayüz çizilmez; yalnızca bağlantı, ağ ve güvenlik duvarı kontrolü (sesi etkilemez)
+            UpdateTray();
+            if (!cfg.TrayTipShown && tray != null)
+            {
+                cfg.TrayTipShown = true;
+                cfg.Save();
+                tray.ShowBalloonTip(5000, AppInfo.Name,
+                    L.T("Arka planda çalışmaya devam ediyor; mikrofon açık kalır. Tamamen kapatmak için simgeye sağ tıkla → Çıkış.",
+                        "Still running in the background; the microphone stays on. To quit, right-click the icon → Exit."), ToolTipIcon.Info);
+            }
+            TrimMemory();
+        }
+
+        void LeaveBackground()
+        {
+            background = false;
+            tick.Interval = 80;
+            UpdateUi();
+            DoLayout();
+        }
+
+        void UpdateTray()
+        {
+            if (tray == null) return;
+            var a = Active;
+            string t = a != null ? L.T("Mikrofon açık: ", "Microphone on: ") + a.Name
+                     : server != null && server.Clients.Count > 0 ? L.T("Telefon bağlı", "Phone connected")
+                     : L.T("Telefon bekleniyor", "Waiting for the phone");
+            t = AppInfo.Name + "\n" + t;
+            if (t.Length > 63) t = t.Substring(0, 63);
+            if (tray.Text != t) tray.Text = t;
+        }
+
+        [System.Runtime.InteropServices.DllImport("psapi.dll")] static extern bool EmptyWorkingSet(IntPtr h);
+
+        // Pencere gizliyken kullanılmayan bellek Windows'a geri verilir
+        static void TrimMemory()
+        {
+            try
+            {
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                using (var p = System.Diagnostics.Process.GetCurrentProcess()) EmptyWorkingSet(p.Handle);
+            }
+            catch { }
+        }
+
+        // Discord vb. programlarda sanal mikrofon "VB-Audio Virtual Cable" değil "Broken Mic" görünsün (bir kez; sonra kullanıcı değiştirebilir)
+        void DefaultMicName()
+        {
+            if (cfg.MicNamed) return;
+            var ep = MicName.Find();
+            if (ep == null) return;   // sürücü henüz yok ya da yeniden başlatma bekleniyor: sonraki açılışta
+            cfg.MicNamed = true;
+            cfg.Save();
+            if (!ep.IsFactoryName) return;   // kullanıcı zaten ad vermiş
+            if (MicName.Rename(ep, MicName.Default, false) == null)
+            {
+                micEp = MicName.Find();
+                if (micEp != null) txtMicName.Box.Text = micEp.Name;
+            }
         }
 
         void InitialSize()
@@ -471,7 +574,7 @@ namespace BrokenMicrophone
             micEp = MicName.Find();
             lblMicName = Section(L.T("Programlarda görünen adı", "Name shown in apps"));
             txtMicName = Add(new TextField());
-            txtMicName.Box.Text = micEp == null ? MicName.Default : micEp.Name.StartsWith("CABLE", StringComparison.OrdinalIgnoreCase) ? MicName.Default : micEp.Name;
+            txtMicName.Box.Text = micEp == null || micEp.IsFactoryName ? MicName.Default : micEp.Name;
             txtMicName.Box.MaxLength = 40;
             btnRename = Btn(L.T("Adını değiştir", "Rename"), BtnKind.Secondary, delegate { RenameMic(); });
             txtMicName.Box.KeyDown += delegate (object s, KeyEventArgs e) { if (e.KeyCode == Keys.Enter) { e.SuppressKeyPress = true; RenameMic(); } };
@@ -929,6 +1032,27 @@ namespace BrokenMicrophone
             if (sig != lastSig) { lastSig = sig; DoLayout(); }
         }
 
+        // Pencere gizliyken saniyede bir: yalnızca gerekenler
+        int bgSlow;
+        void BackgroundTick()
+        {
+            bgSlow++;
+            if (server != null && !SameClients(server.Clients, list.Items)) OnClientsChanged();
+            UpdateTray();
+            if (bgSlow % 20 == 0) CheckFirewall();
+            if (bgSlow % 6 == 0)
+            {
+                var now = Net.Addresses();
+                if (Signature(now) != Signature(addresses))
+                {
+                    addresses = now;
+                    FillAddresses();
+                    UpdateUrl();
+                    CheckFirewall();
+                }
+            }
+        }
+
         void RenameMic()
         {
             var ep = MicName.Find();
@@ -958,6 +1082,7 @@ namespace BrokenMicrophone
         int slow;
         void OnTick()
         {
+            if (background) { BackgroundTick(); return; }
             var a = Active;
             float lv = 0;
             if (a != null && a.Sending) lv = a.Peak;
@@ -1028,6 +1153,7 @@ namespace BrokenMicrophone
         void ShowDriverHelp()
         {
             using (var d = new DriverDialog()) d.ShowDialog(this);
+            DefaultMicName();
             micEp = MicName.Find();
             // kurulumdan sonra cihaz listesi tazelenir
             outputs = Player.Devices();

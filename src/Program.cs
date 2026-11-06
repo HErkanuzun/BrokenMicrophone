@@ -21,7 +21,7 @@ namespace BrokenMicrophone
             // sanal mikrofonun adını değiştirmek için yönetici olarak açılan yardımcı kopya
             if (args.Length >= 3 && args[0] == "--rename-mic")
             {
-                Environment.Exit(MicName.RunElevated(args[1], args[2]));
+                Environment.Exit(MicName.RunElevated(args[1], args[2], args.Length >= 4 ? args[3] : null));
                 return;
             }
 

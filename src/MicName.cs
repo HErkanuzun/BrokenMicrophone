@@ -7,23 +7,36 @@ using Microsoft.Win32;
 namespace BrokenMicrophone
 {
     /// <summary>
-    /// Sanal mikrofonun (ör. VB-CABLE'ın "CABLE Output") Windows'taki adını okur ve değiştirir. Discord, Zoom gibi
-    /// programlar bu adı gösterir: "Broken Mic (VB-Audio Virtual Cable)". Windows'un Ses ayarlarındaki
-    /// "Yeniden adlandır" ile aynı şeyi yapar; sürücüye ya da sese dokunmaz.
+    /// Sanal mikrofonun (VB-CABLE'ın kayıt ucu) Windows'taki adını okur ve değiştirir. Programlar iki ad gösterir:
+    /// Discord'da büyük satır = arayüz adı ("VB-Audio Virtual Cable"), küçük satır = cihaz adı ("CABLE Output").
+    /// Büyük satır kullanıcının verdiği ad olur (varsayılan "Broken Mic"), küçük satır "Mikrofon".
+    /// Sürücüye ya da sese dokunmaz; yalnızca Windows'un sakladığı adlar değişir.
     /// </summary>
     static class MicName
     {
         const string CaptureKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Capture";
-        const string NameProp = "{a45c254e-df1c-4efd-8020-67d146a850e0},2";     // PKEY_Device_DeviceDesc (değiştirilebilen ad)
-        const string DriverProp = "{b3f8fa53-0004-438e-9003-51a46e139bfc},6";   // sürücünün adı (parantez içindeki kısım)
+        const string DescFmt = "a45c254e-df1c-4efd-8020-67d146a850e0";   // ,2  cihaz adı (küçük satır)
+        const string IfFmt = "b3f8fa53-0004-438e-9003-51a46e139bfc";     // ,6  arayüz adı (büyük satır)
+        const string DescProp = "{" + DescFmt + "},2", IfProp = "{" + IfFmt + "},6";
+        const string ServiceProp = "{a8b865dd-2e3d-4094-ad97-e593a70c75d6},8";   // sürücü servisi (ad değişse de sabit)
+        const string InfProp = "{83da6326-97a6-4088-9453-a1923f573b29},3";
         public const string Default = "Broken Mic";
 
-        public class Endpoint { public string Guid, Name, Driver; public string Full { get { return Name + " (" + Driver + ")"; } } }
-
-        static bool IsOurs(string driver)
+        public class Endpoint
         {
-            string d = (driver ?? "").ToLowerInvariant();
-            return d.Contains("vb-audio virtual cable") || d.Contains("broken microphone");
+            public string Guid, Name, Desc;   // Name: programlarda görünen ad (büyük satır)
+            public string Full { get { return Desc + " (" + Name + ")"; } }
+            public bool IsFactoryName { get { return Name.ToLowerInvariant().Contains("vb-audio virtual cable"); } }
+        }
+
+        static string Small { get { return L.T("Mikrofon", "Microphone"); } }
+
+        static bool IsOurs(Microsoft.Win32.RegistryKey p)
+        {
+            string svc = (p.GetValue(ServiceProp) as string ?? "").ToLowerInvariant();
+            string inf = (p.GetValue(InfProp) as string ?? "").ToLowerInvariant();
+            string name = (p.GetValue(IfProp) as string ?? "").ToLowerInvariant();
+            return svc == "vbaudiovacwdm" || inf.Contains("vbcableinst") || name.Contains("vb-audio virtual cable") || name.Contains("broken microphone");
         }
 
         /// <summary>Sanal mikrofonun kayıt ucu (yoksa null). Yönetici izni gerekmez.</summary>
@@ -41,12 +54,11 @@ namespace BrokenMicrophone
                             if (k == null || p == null) continue;
                             object state = k.GetValue("DeviceState");
                             if (state is int && ((int)state & 0xF) != 1) continue;   // sadece etkin cihaz
-                            string drv = p.GetValue(DriverProp) as string;
-                            if (!IsOurs(drv)) continue;
+                            if (!IsOurs(p)) continue;
                             var e = new Endpoint();
                             e.Guid = id;
-                            e.Driver = drv;
-                            e.Name = p.GetValue(NameProp) as string ?? "";
+                            e.Name = p.GetValue(IfProp) as string ?? "";
+                            e.Desc = p.GetValue(DescProp) as string ?? "";
                             return e;
                         }
                 }
@@ -63,18 +75,18 @@ namespace BrokenMicrophone
             return s.Length > 40 ? s.Substring(0, 40) : s;
         }
 
-        /// <summary>Adı değiştirir. Windows izin vermezse yönetici izni isteyip kendini yeniden çalıştırır. Hata yoksa null.</summary>
-        public static string Rename(Endpoint e, string name)
+        /// <summary>Adı değiştirir. Windows izin vermezse (ve izin verildiyse) yönetici izni isteyip kendini yeniden çalıştırır. Hata yoksa null.</summary>
+        public static string Rename(Endpoint e, string name, bool mayElevate = true)
         {
             name = Clean(name);
             if (name == "") return L.T("Ad boş olamaz.", "The name can't be empty.");
-            int hr = Write(e.Guid, name);
+            int hr = WriteBoth(e.Guid, name, Small);
             if (hr == 0) return null;
-            if (hr != unchecked((int)0x80070005)) return L.T("Ad değiştirilemedi (kod 0x", "Couldn't rename (code 0x") + hr.ToString("X8") + ").";
+            if (hr != unchecked((int)0x80070005) || !mayElevate) return L.T("Ad değiştirilemedi (kod 0x", "Couldn't rename (code 0x") + hr.ToString("X8") + ").";
             try
             {
-                string b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(name));
-                var psi = new ProcessStartInfo(System.Windows.Forms.Application.ExecutablePath, "--rename-mic " + e.Guid + " " + b64);
+                string b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(name)), s64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(Small));
+                var psi = new ProcessStartInfo(System.Windows.Forms.Application.ExecutablePath, "--rename-mic " + e.Guid + " " + b64 + " " + s64);
                 psi.Verb = "runas";
                 psi.UseShellExecute = true;
                 using (var p = Process.Start(psi))
@@ -88,12 +100,13 @@ namespace BrokenMicrophone
         }
 
         /// <summary>Program.cs: yönetici olarak açılan yardımcı kopya. Çıkış kodu = HRESULT.</summary>
-        public static int RunElevated(string guid, string b64)
+        public static int RunElevated(string guid, string b64, string s64)
         {
             try
             {
                 if (guid.Length != 38 || guid[0] != '{') return 87;
-                return Write(guid, Clean(Encoding.UTF8.GetString(Convert.FromBase64String(b64))));
+                string small = s64 == null ? "Mikrofon" : Clean(Encoding.UTF8.GetString(Convert.FromBase64String(s64)));
+                return WriteBoth(guid, Clean(Encoding.UTF8.GetString(Convert.FromBase64String(b64))), small);
             }
             catch { return 87; }
         }
@@ -128,7 +141,15 @@ namespace BrokenMicrophone
 
         [StructLayout(LayoutKind.Sequential)] struct PROPERTYKEY { public Guid fmtid; public int pid; }
 
-        static int Write(string guid, string name)
+        static int WriteBoth(string guid, string name, string small)
+        {
+            int hr = Write(guid, IfFmt, 6, name);
+            if (hr != 0) return hr;
+            if (small != "") Write(guid, DescFmt, 2, small);   // küçük satır: olmazsa da önemli değil
+            return 0;
+        }
+
+        static int Write(string guid, string fmt, int pid, string name)
         {
             IntPtr pv = IntPtr.Zero, str = IntPtr.Zero;
             try
@@ -140,7 +161,7 @@ namespace BrokenMicrophone
                 IPropertyStore ps;
                 hr = dev.OpenPropertyStore(2, out ps);                         // STGM_READWRITE
                 if (hr != 0) return hr;
-                var key = new PROPERTYKEY { fmtid = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), pid = 2 };
+                var key = new PROPERTYKEY { fmtid = new Guid(fmt), pid = pid };
                 // PROPVARIANT: VT_LPWSTR (31) + metin göstergesi (24 bayt yeter)
                 pv = Marshal.AllocCoTaskMem(24);
                 for (int i = 0; i < 24; i++) Marshal.WriteByte(pv, i, 0);
