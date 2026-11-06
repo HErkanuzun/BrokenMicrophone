@@ -74,6 +74,10 @@ Source: "..\packaging\README.txt"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
 
+[Registry]
+; "Windows ile başlat" programın içinden açılır; kaldırınca kayıt silinir
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "BrokenMicrophone"; Flags: uninsdeletevalue dontcreatekey
+
 [Run]
 ; telefonun bağlanabilmesi için: sadece bu program, sadece yerel ağdaki cihazlar (ağ "Ortak" olsa da)
 Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#AppName}"""; Flags: runhidden; StatusMsg: "{cm:Firewall}"

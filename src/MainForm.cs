@@ -75,7 +75,8 @@ namespace BrokenMicrophone
         bool background;                  // pencere kapalı, uygulama tepside çalışıyor
 
         // Ayarlar
-        Label secLang, secNet, lblFw, secAbout, lblApp, lblFoot;
+        Label secLang, secNet, lblFw, secAbout, lblApp, lblFoot, secStart, lblStart;
+        Toggle tglStart;
         Seg segLang;
         FlatButton btnFw, btnHelp2, btnAbout;
         PictureBox logo;
@@ -189,14 +190,33 @@ namespace BrokenMicrophone
             tray.Visible = true;
         }
 
-        void GoBackground()
+        // Windows ile başlarken pencere hiç gösterilmez, doğrudan tepside çalışır
+        bool startHidden;
+        public void StartHidden() { startHidden = true; }
+
+        protected override void SetVisibleCore(bool value)
         {
-            SavePlacement();
+            if (startHidden && value)
+            {
+                startHidden = false;
+                if (!IsHandleCreated) CreateHandle();   // diğer kopyadan gelen "göster" sinyali için gerekli
+                base.SetVisibleCore(false);
+                GoBackground(false);
+                return;
+            }
+            base.SetVisibleCore(value);
+        }
+
+        void GoBackground() { GoBackground(true); }
+
+        void GoBackground(bool closed)
+        {
+            if (closed) SavePlacement();
             background = true;
             Hide();
             tick.Interval = 1000;   // arayüz çizilmez; yalnızca bağlantı, ağ ve güvenlik duvarı kontrolü (sesi etkilemez)
             UpdateTray();
-            if (!cfg.TrayTipShown && tray != null)
+            if (closed && !cfg.TrayTipShown && tray != null)
             {
                 cfg.TrayTipShown = true;
                 cfg.Save();
@@ -593,6 +613,13 @@ namespace BrokenMicrophone
                 L.Set(cfg.Lang);
                 BeginInvoke((MethodInvoker)RebuildUi);
             };
+            secStart = Section(L.T("Başlangıç", "Startup"));
+            tglStart = Add(new Toggle(L.T("Windows ile başlat", "Start with Windows")));
+            tglStart.Checked = AutoStart.Enabled;
+            tglStart.Changed += delegate (bool on) { if (!AutoStart.Set(on)) tglStart.Checked = AutoStart.Enabled; };
+            lblStart = Text2(L.T("Bilgisayar açıldıktan biraz sonra, düşük öncelikle ve pencere açmadan tepside başlar; açılışı yavaşlatmaz.",
+                                 "Starts in the tray a little after Windows starts, at low priority and without opening the window, so it doesn't slow down startup."),
+                             Theme.Sub, 9f, FontStyle.Regular);
             secNet = Section(L.T("Bağlantı", "Connection"));
             lblFw = Text2("", Theme.Text, 9.5f, FontStyle.Regular);
             btnFw = Btn("", BtnKind.Secondary, delegate { AllowFirewall(); });
@@ -849,6 +876,13 @@ namespace BrokenMicrophone
             secLang.Location = new Point(X + cp, Y + cp);
             segLang.SetBounds(X + cp, secLang.Bottom + P(8), Math.Min(W - cp * 2, P(240)), P(38));
             Y = segLang.Bottom + cp;
+            Card(X, top, W, Y - top, Color.Empty);
+
+            Y += P(14);
+            top = Y;
+            secStart.Location = new Point(X + cp, Y + cp);
+            tglStart.SetBounds(X + cp, secStart.Bottom + P(8), W - cp * 2, P(32));
+            Y = Wrap(lblStart, X + cp, tglStart.Bottom + P(6), W - cp * 2) + cp;
             Card(X, top, W, Y - top, Color.Empty);
 
             Y += P(14);

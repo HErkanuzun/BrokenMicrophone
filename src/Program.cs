@@ -38,6 +38,14 @@ namespace BrokenMicrophone
                 return;
             }
 
+            // Windows ile başlatıldı: açılışı yavaşlatmamak için biraz bekler ve düşük öncelikle başlar
+            bool auto = Array.IndexOf(args, AutoStart.Arg) >= 0;
+            if (auto)
+            {
+                try { System.Diagnostics.Process.GetCurrentProcess().PriorityClass = System.Diagnostics.ProcessPriorityClass.BelowNormal; } catch { }
+                Thread.Sleep(20000);
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             var cfg = Settings.Load();
@@ -52,6 +60,7 @@ namespace BrokenMicrophone
                 catch (AbandonedMutexException) { owned = true; }
                 if (!owned)
                 {
+                    if (auto) return;   // kullanıcı zaten açmış; Windows ile başlayan kopya sessizce çıkar
                     // Zaten açık: o pencere öne getirilir
                     if (!Signal(ShowEvent))
                         MessageBox.Show(L.T("Broken Microphone zaten açık.", "Broken Microphone is already running."), AppInfo.Name);
@@ -63,7 +72,14 @@ namespace BrokenMicrophone
                     using (var show = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEvent))
                     using (var exit = new EventWaitHandle(false, EventResetMode.AutoReset, ExitEvent))
                     {
+                        AutoStart.Refresh();
                         var form = new MainForm(cfg);
+                        if (auto)
+                        {
+                            form.StartHidden();
+                            // hazırlık bitti; ses kesilmesin diye normal önceliğe döner
+                            try { System.Diagnostics.Process.GetCurrentProcess().PriorityClass = System.Diagnostics.ProcessPriorityClass.Normal; } catch { }
+                        }
                         var listener = new Thread(delegate ()
                         {
                             var handles = new WaitHandle[] { show, exit };
